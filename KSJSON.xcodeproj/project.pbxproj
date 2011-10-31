@@ -1,0 +1,403 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		398D0711145E5A9C00E0213B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 398D0710145E5A9C00E0213B /* Foundation.framework */; };
+		398D0717145E5A9C00E0213B /* KSJSON.m in Sources */ = {isa = PBXBuildFile; fileRef = 398D0716145E5A9C00E0213B /* KSJSON.m */; };
+		398D071F145E5A9C00E0213B /* SenTestingKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 398D071E145E5A9C00E0213B /* SenTestingKit.framework */; };
+		398D0721145E5A9D00E0213B /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 398D0720145E5A9C00E0213B /* UIKit.framework */; };
+		398D0722145E5A9D00E0213B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 398D0710145E5A9C00E0213B /* Foundation.framework */; };
+		398D0725145E5A9D00E0213B /* libKSJSON.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 398D070D145E5A9C00E0213B /* libKSJSON.a */; };
+		398D072B145E5A9D00E0213B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 398D0729145E5A9D00E0213B /* InfoPlist.strings */; };
+		398D072E145E5A9D00E0213B /* KSJSONTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 398D072D145E5A9D00E0213B /* KSJSONTests.m */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		398D0723145E5A9D00E0213B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 398D0704145E5A9C00E0213B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 398D070C145E5A9C00E0213B;
+			remoteInfo = KSJSON;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		398D070D145E5A9C00E0213B /* libKSJSON.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libKSJSON.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		398D0710145E5A9C00E0213B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		398D0714145E5A9C00E0213B /* KSJSON-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "KSJSON-Prefix.pch"; sourceTree = "<group>"; };
+		398D0715145E5A9C00E0213B /* KSJSON.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = KSJSON.h; sourceTree = "<group>"; };
+		398D0716145E5A9C00E0213B /* KSJSON.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = KSJSON.m; sourceTree = "<group>"; };
+		398D071D145E5A9C00E0213B /* KSJSONTests.octest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KSJSONTests.octest; sourceTree = BUILT_PRODUCTS_DIR; };
+		398D071E145E5A9C00E0213B /* SenTestingKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SenTestingKit.framework; path = Library/Frameworks/SenTestingKit.framework; sourceTree = DEVELOPER_DIR; };
+		398D0720145E5A9C00E0213B /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
+		398D0728145E5A9D00E0213B /* KSJSONTests-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "KSJSONTests-Info.plist"; sourceTree = "<group>"; };
+		398D072A145E5A9D00E0213B /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		398D072D145E5A9D00E0213B /* KSJSONTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = KSJSONTests.m; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		398D070A145E5A9C00E0213B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				398D0711145E5A9C00E0213B /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		398D0719145E5A9C00E0213B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				398D071F145E5A9C00E0213B /* SenTestingKit.framework in Frameworks */,
+				398D0721145E5A9D00E0213B /* UIKit.framework in Frameworks */,
+				398D0722145E5A9D00E0213B /* Foundation.framework in Frameworks */,
+				398D0725145E5A9D00E0213B /* libKSJSON.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		398D0702145E5A9C00E0213B = {
+			isa = PBXGroup;
+			children = (
+				398D0712145E5A9C00E0213B /* KSJSON */,
+				398D0726145E5A9D00E0213B /* KSJSONTests */,
+				398D070F145E5A9C00E0213B /* Frameworks */,
+				398D070E145E5A9C00E0213B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		398D070E145E5A9C00E0213B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				398D070D145E5A9C00E0213B /* libKSJSON.a */,
+				398D071D145E5A9C00E0213B /* KSJSONTests.octest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		398D070F145E5A9C00E0213B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				398D0710145E5A9C00E0213B /* Foundation.framework */,
+				398D071E145E5A9C00E0213B /* SenTestingKit.framework */,
+				398D0720145E5A9C00E0213B /* UIKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		398D0712145E5A9C00E0213B /* KSJSON */ = {
+			isa = PBXGroup;
+			children = (
+				398D0715145E5A9C00E0213B /* KSJSON.h */,
+				398D0716145E5A9C00E0213B /* KSJSON.m */,
+				398D0713145E5A9C00E0213B /* Supporting Files */,
+			);
+			path = KSJSON;
+			sourceTree = "<group>";
+		};
+		398D0713145E5A9C00E0213B /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				398D0714145E5A9C00E0213B /* KSJSON-Prefix.pch */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		398D0726145E5A9D00E0213B /* KSJSONTests */ = {
+			isa = PBXGroup;
+			children = (
+				398D072D145E5A9D00E0213B /* KSJSONTests.m */,
+				398D0727145E5A9D00E0213B /* Supporting Files */,
+			);
+			path = KSJSONTests;
+			sourceTree = "<group>";
+		};
+		398D0727145E5A9D00E0213B /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				398D0728145E5A9D00E0213B /* KSJSONTests-Info.plist */,
+				398D0729145E5A9D00E0213B /* InfoPlist.strings */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		398D070B145E5A9C00E0213B /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		398D070C145E5A9C00E0213B /* KSJSON */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 398D0731145E5A9D00E0213B /* Build configuration list for PBXNativeTarget "KSJSON" */;
+			buildPhases = (
+				398D0709145E5A9C00E0213B /* Sources */,
+				398D070A145E5A9C00E0213B /* Frameworks */,
+				398D070B145E5A9C00E0213B /* Headers */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KSJSON;
+			productName = KSJSON;
+			productReference = 398D070D145E5A9C00E0213B /* libKSJSON.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		398D071C145E5A9C00E0213B /* KSJSONTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 398D0734145E5A9D00E0213B /* Build configuration list for PBXNativeTarget "KSJSONTests" */;
+			buildPhases = (
+				398D0718145E5A9C00E0213B /* Sources */,
+				398D0719145E5A9C00E0213B /* Frameworks */,
+				398D071A145E5A9C00E0213B /* Resources */,
+				398D071B145E5A9C00E0213B /* ShellScript */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				398D0724145E5A9D00E0213B /* PBXTargetDependency */,
+			);
+			name = KSJSONTests;
+			productName = KSJSONTests;
+			productReference = 398D071D145E5A9C00E0213B /* KSJSONTests.octest */;
+			productType = "com.apple.product-type.bundle";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		398D0704145E5A9C00E0213B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0420;
+				ORGANIZATIONNAME = Stenerud;
+			};
+			buildConfigurationList = 398D0707145E5A9C00E0213B /* Build configuration list for PBXProject "KSJSON" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 398D0702145E5A9C00E0213B;
+			productRefGroup = 398D070E145E5A9C00E0213B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				398D070C145E5A9C00E0213B /* KSJSON */,
+				398D071C145E5A9C00E0213B /* KSJSONTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		398D071A145E5A9C00E0213B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				398D072B145E5A9D00E0213B /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		398D071B145E5A9C00E0213B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Run the unit tests in this test bundle.\n\"${SYSTEM_DEVELOPER_DIR}/Tools/RunUnitTests\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		398D0709145E5A9C00E0213B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				398D0717145E5A9C00E0213B /* KSJSON.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		398D0718145E5A9C00E0213B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				398D072E145E5A9D00E0213B /* KSJSONTests.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		398D0724145E5A9D00E0213B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 398D070C145E5A9C00E0213B /* KSJSON */;
+			targetProxy = 398D0723145E5A9D00E0213B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		398D0729145E5A9D00E0213B /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				398D072A145E5A9D00E0213B /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		398D072F145E5A9D00E0213B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 4.0;
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		398D0730145E5A9D00E0213B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 4.0;
+				SDKROOT = iphoneos;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		398D0732145E5A9D00E0213B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DSTROOT = /tmp/KSJSON.dst;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		398D0733145E5A9D00E0213B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DSTROOT = /tmp/KSJSON.dst;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		398D0735145E5A9D00E0213B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(SDKROOT)/Developer/Library/Frameworks",
+					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
+				);
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
+				INFOPLIST_FILE = "KSJSONTests/KSJSONTests-Info.plist";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = octest;
+			};
+			name = Debug;
+		};
+		398D0736145E5A9D00E0213B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(SDKROOT)/Developer/Library/Frameworks",
+					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
+				);
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
+				INFOPLIST_FILE = "KSJSONTests/KSJSONTests-Info.plist";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = octest;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		398D0707145E5A9C00E0213B /* Build configuration list for PBXProject "KSJSON" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				398D072F145E5A9D00E0213B /* Debug */,
+				398D0730145E5A9D00E0213B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		398D0731145E5A9D00E0213B /* Build configuration list for PBXNativeTarget "KSJSON" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				398D0732145E5A9D00E0213B /* Debug */,
+				398D0733145E5A9D00E0213B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		398D0734145E5A9D00E0213B /* Build configuration list for PBXNativeTarget "KSJSONTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				398D0735145E5A9D00E0213B /* Debug */,
+				398D0736145E5A9D00E0213B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 398D0704145E5A9C00E0213B /* Project object */;
+}
