@@ -45,9 +45,8 @@
 #define DICTIONARY_BEGIN '{'
 #define DICTIONARY_END '}'
 
-#define is_likely(x) __builtin_expect((x),1) 
-#define is_unlikely(x) __builtin_expect((x),0)
-
+#define likely_if(x) if(__builtin_expect(x,1))
+#define unlikely_if(x) if(__builtin_expect(x,0))
 
 
 static id deserializeJSON(const unichar** pos, const unichar* end);
@@ -57,7 +56,7 @@ static id deserializeDictionary(const unichar** pos, const unichar* end);
 static NSString* deserializeString(const unichar** pos, const unichar* end);
 
 
-static char g_hexConversion[] =
+static unichar g_hexConversion[] =
 {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
@@ -67,7 +66,8 @@ static char g_hexConversion[] =
     0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77,
     0x77, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
 };
-static unsigned int g_hexConversionEnd = sizeof(g_hexConversion) / sizeof(*g_hexConversion);
+static unsigned int g_hexConversionEnd = sizeof(g_hexConversion) /
+sizeof(*g_hexConversion);
 
 static bool parseUnicodeSequence(const unichar* start, unichar* dst)
 {
@@ -75,13 +75,15 @@ static bool parseUnicodeSequence(const unichar* start, unichar* dst)
     const unichar* end = start + 4;
     for(const unichar* ch = start; ch < end; ch++)
     {
-        int next = *ch - '0';
-        if(next < 0 || next >= g_hexConversionEnd || g_hexConversion[next] == 0x77)
+        unsigned int next = *ch - '0';
+        unlikely_if(next < 0 ||
+                    next >= g_hexConversionEnd ||
+                    g_hexConversion[next] == 0x77)
         {
             NSLog(@"KSJSON: Invalid unicode sequence");
             return false;
         }
-        accum = (accum << 4) + g_hexConversion[next];
+        accum = (unichar)((accum << 4) + g_hexConversion[next]);
     }
     *dst = accum;
     return true;
@@ -90,9 +92,9 @@ static bool parseUnicodeSequence(const unichar* start, unichar* dst)
 static NSString* parseString(const unichar* ch, const unichar* end)
 {
     NSString* result = nil;
-    unsigned int length = end - ch;
+    unsigned int length = (unsigned int)(end - ch);
     unichar* string = malloc(length * sizeof(*string));
-    if(string == NULL)
+    unlikely_if(string == NULL)
     {
         NSLog(@"KSJSON: Out of memory");
         return nil;
@@ -101,7 +103,7 @@ static NSString* parseString(const unichar* ch, const unichar* end)
     
     for(;ch < end; ch++)
     {
-        if(*ch != '\\')
+        likely_if(*ch != '\\')
         {
             *pStr++ = *ch;
         }
@@ -109,7 +111,7 @@ static NSString* parseString(const unichar* ch, const unichar* end)
         {
             ch++;
             length--; // Skipped a backslash.
-            if(ch >= end)
+            unlikely_if(ch >= end)
             {
                 NSLog(@"KSJSON: Unterminated escape sequence");
                 goto fail;
@@ -138,15 +140,15 @@ static NSString* parseString(const unichar* ch, const unichar* end)
                     break;
                 case 'u':
                     ch++;
-                    if(ch > end - 4)
-                    {
-                        NSLog(@"KSJSON: Unterminated escape sequence");
-                        goto fail;
-                    }
-                    if(!parseUnicodeSequence(ch, pStr++))
-                    {
-                        goto fail;
-                    }
+                    unlikely_if(ch > end - 4)
+                {
+                    NSLog(@"KSJSON: Unterminated escape sequence");
+                    goto fail;
+                }
+                    unlikely_if(!parseUnicodeSequence(ch, pStr++))
+                {
+                    goto fail;
+                }
                     ch += 3;
                     length -= 4; // Replaced 5 chars with 1.
                     break;
@@ -169,17 +171,17 @@ static NSString* deserializeString(const unichar** pos, const unichar* end)
     const unichar* start = ch;
     for(;ch < end; ch++)
     {
-        if(*ch == '\\')
+        unlikely_if(*ch == '\\')
         {
             ch++;
         }
-        else if(*ch == '"')
+        else unlikely_if(*ch == '"')
         {
             break;
         }
     }
     
-    if(ch >= end)
+    unlikely_if(ch >= end)
     {
         NSLog(@"KSJSON: Unterminated string");
         return nil;
@@ -218,7 +220,7 @@ static NSNumber* deserializeNumber(const unichar** pos, const unichar* end)
     for(;ch < end && isdigit(*ch); ch++)
     {
         accum = accum * 10 + (*ch - '0');
-        if(accum < 0)
+        unlikely_if(accum < 0)
         {
             // Overflow
             break;
@@ -238,19 +240,20 @@ static NSNumber* deserializeNumber(const unichar** pos, const unichar* end)
     
     *pos = ch;
     
-    NSString* string = [NSString stringWithCharacters:start length:ch - start];
+    NSString* string = [NSString stringWithCharacters:start
+                                               length:(NSUInteger)(ch - start)];
     return [NSDecimalNumber decimalNumberWithString:string];
 }
 
 static NSNumber* deserializeFalse(const unichar** pos, const unichar* end)
 {
     const unichar* ch = *pos;
-    if(end - ch < 5)
+    unlikely_if(end - ch < 5)
     {
         NSLog(@"KSJSON: Premature end of JSON data");
         return nil;
     }
-    if(!(ch[1] == 'a' && ch[2] == 'l' && ch[3] == 's' && ch[4] == 'e'))
+    unlikely_if(!(ch[1] == 'a' && ch[2] == 'l' && ch[3] == 's' && ch[4] == 'e'))
     {
         NSLog(@"KSJSON: Invalid characters while parsing 'false'");
         return nil;
@@ -262,12 +265,12 @@ static NSNumber* deserializeFalse(const unichar** pos, const unichar* end)
 static NSNumber* deserializeTrue(const unichar** pos, const unichar* end)
 {
     const unichar* ch = *pos;
-    if(end - ch < 4)
+    unlikely_if(end - ch < 4)
     {
         NSLog(@"KSJSON: Premature end of JSON data");
         return nil;
     }
-    if(!(ch[1] == 'r' && ch[2] == 'u' && ch[3] == 'e'))
+    unlikely_if(!(ch[1] == 'r' && ch[2] == 'u' && ch[3] == 'e'))
     {
         NSLog(@"KSJSON: Invalid characters while parsing 'true'");
         return nil;
@@ -279,12 +282,12 @@ static NSNumber* deserializeTrue(const unichar** pos, const unichar* end)
 static NSNull* deserializeNull(const unichar** pos, const unichar* end)
 {
     const unichar* ch = *pos;
-    if(end - ch < 4)
+    unlikely_if(end - ch < 4)
     {
         NSLog(@"KSJSON: Premature end of JSON data");
         return nil;
     }
-    if(!(ch[1] == 'u' && ch[2] == 'l' && ch[3] == 'l'))
+    unlikely_if(!(ch[1] == 'u' && ch[2] == 'l' && ch[3] == 'l'))
     {
         NSLog(@"KSJSON: Invalid characters while parsing 'null'");
         return nil;
@@ -297,7 +300,7 @@ static id deserializeElement(const unichar** pos, const unichar* end)
 {
     skipWhitespace(*pos, end);
     
-    switch (**pos)
+    switch(**pos)
     {
         case ARRAY_BEGIN:
             return deserializeArray(pos, end);
@@ -328,18 +331,18 @@ static id deserializeArray(const unichar** pos, const unichar* end)
     while(*pos < end)
     {
         skipWhitespace(*pos, end);
-        if(**pos == ARRAY_END)
+        unlikely_if(**pos == ARRAY_END)
         {
             (*pos)++;
             return array;
         }
         id element = deserializeElement(pos, end);
-        if(element == nil)
+        unlikely_if(element == nil)
         {
             return nil;
         }
         skipWhitespace(*pos, end);
-        if(**pos == ELEMENT_SEPARATOR)
+        likely_if(**pos == ELEMENT_SEPARATOR)
         {
             (*pos)++;
         }
@@ -356,29 +359,29 @@ static id deserializeDictionary(const unichar** pos, const unichar* end)
     while(*pos < end)
     {
         skipWhitespace(*pos, end);
-        if(**pos == DICTIONARY_END)
+        unlikely_if(**pos == DICTIONARY_END)
         {
             (*pos)++;
             return dict;
         }
         NSString* name = deserializeString(pos, end);
-        if(name == nil)
+        unlikely_if(name == nil)
         {
             return nil;
         }
         skipWhitespace(*pos, end);
-        if(**pos != NAME_SEPARATOR)
+        unlikely_if(**pos != NAME_SEPARATOR)
         {
             NSLog(@"KSJSON: Expected name separator");
         }
         (*pos)++;
         id element = deserializeElement(pos, end);
-        if(element == nil)
+        unlikely_if(element == nil)
         {
             return nil;
         }
         skipWhitespace(*pos, end);
-        if(**pos == ELEMENT_SEPARATOR)
+        likely_if(**pos == ELEMENT_SEPARATOR)
         {
             (*pos)++;
         }
@@ -434,7 +437,7 @@ static bool serializeInit(KSJSONSerializeContext* context)
     context->index = 0;
     context->size = KSJSON_InitialBuffSize;
     context->buffer = malloc(sizeof(context->buffer[0]) * context->size);
-    if(is_unlikely(context->buffer == NULL))
+    unlikely_if(context->buffer == NULL)
     {
         NSLog(@"KSJSON: Out of memory");
         return false;
@@ -442,14 +445,16 @@ static bool serializeInit(KSJSONSerializeContext* context)
     return true;
 }
 
-static bool serializeRealloc(KSJSONSerializeContext* context, int extraCount)
+static bool serializeRealloc(KSJSONSerializeContext* context,
+                             unsigned int extraCount)
 {
     while(context->index + extraCount > context->size)
     {
         context->size *= 2;
     }
-    context->buffer = realloc(context->buffer, sizeof(context->buffer[0]) * context->size);
-    if(is_unlikely(context->buffer == NULL))
+    context->buffer = realloc(context->buffer,
+                              sizeof(context->buffer[0]) * context->size);
+    unlikely_if(context->buffer == NULL)
     {
         NSLog(@"KSJSON: Out of memory");
         return false;
@@ -459,15 +464,21 @@ static bool serializeRealloc(KSJSONSerializeContext* context, int extraCount)
 
 static NSString* serializeFinish(KSJSONSerializeContext* context)
 {
-    NSString* string = [NSString stringWithCharacters:context->buffer length:context->index];
+    NSString* string = [NSString stringWithCharacters:context->buffer
+                                               length:context->index];
     free(context->buffer);
     return string;
+}
+
+static void serializeAbort(KSJSONSerializeContext* context)
+{
+    free(context->buffer);
 }
 
 static void serializeChar(KSJSONSerializeContext* context, const unichar ch)
 {
     context->buffer[context->index++] = ch;
-    if(is_unlikely(context->index >= context->size))
+    unlikely_if(context->index >= context->size)
     {
         serializeRealloc(context, 1);
     }
@@ -477,7 +488,7 @@ static void serialize2Chars(KSJSONSerializeContext* context,
                             const unichar ch1,
                             const unichar ch2)
 {
-    if(is_unlikely(context->index + 2 > context->size))
+    unlikely_if(context->index + 2 > context->size)
     {
         serializeRealloc(context, 2);
     }
@@ -489,7 +500,7 @@ static void serializeChars(KSJSONSerializeContext* context,
                            const unichar* chars,
                            unsigned int length)
 {
-    if(is_unlikely(context->index + length > context->size))
+    unlikely_if(context->index + length > context->size)
     {
         serializeRealloc(context, length);
     }
@@ -508,7 +519,7 @@ static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
     CFArrayRef arrayRef = (__bridge CFArrayRef)array;
     CFIndex count = CFArrayGetCount(arrayRef);
     
-    if(is_unlikely(count == 0))
+    unlikely_if(count == 0)
     {
         serialize2Chars(context, '[',']');
         return true;
@@ -517,7 +528,7 @@ static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
     for(CFIndex i = 0; i < count; i++)
     {
         id subObject = (__bridge id) CFArrayGetValueAtIndex(arrayRef, i);
-        if(is_unlikely(!serializeObject(context, subObject)))
+        unlikely_if(!serializeObject(context, subObject))
         {
             return false;
         }
@@ -530,13 +541,14 @@ static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
 
 #define kDictStackSize 50
 
-static bool serializeDictionary(KSJSONSerializeContext* context, NSDictionary* dict)
+static bool serializeDictionary(KSJSONSerializeContext* context,
+                                NSDictionary* dict)
 {
     bool success = NO;
     CFDictionaryRef dictRef = (__bridge CFDictionaryRef)dict;
     CFIndex count = CFDictionaryGetCount(dictRef);
     
-    if(is_unlikely(count == 0))
+    unlikely_if(count == 0)
     {
         serialize2Chars(context, '{','}');
         return true;
@@ -546,15 +558,15 @@ static bool serializeDictionary(KSJSONSerializeContext* context, NSDictionary* d
     const void** values;
     void* memory = NULL;
     const void* stackMemory[kDictStackSize * 2];
-    if(is_likely(count <= kDictStackSize))
+    likely_if(count <= kDictStackSize)
     {
         keys = stackMemory;
         values = keys + count;
     }
     else
     {
-        memory = malloc(sizeof(void*) * count * 2);
-        if(is_unlikely(memory == NULL))
+        memory = malloc(sizeof(void*) * (unsigned int)count * 2);
+        unlikely_if(memory == NULL)
         {
             NSLog(@"KSJSON: Out of memory");
             return false;
@@ -569,12 +581,12 @@ static bool serializeDictionary(KSJSONSerializeContext* context, NSDictionary* d
     {
         id key = (__bridge id)keys[i];
         id value = (__bridge id)values[i];
-        if(is_unlikely(!serializeObject(context, key)))
+        unlikely_if(!serializeObject(context, key))
         {
             goto done;
         }
         serializeChar(context, ':');
-        if(is_unlikely(!serializeObject(context, value)))
+        unlikely_if(!serializeObject(context, value))
         {
             goto done;
         }
@@ -585,7 +597,7 @@ static bool serializeDictionary(KSJSONSerializeContext* context, NSDictionary* d
     
     success = YES;
 done:
-    if(is_unlikely(memory != NULL))
+    unlikely_if(memory != NULL)
     {
         free(memory);
     }
@@ -598,23 +610,25 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
     CFStringRef stringRef = (__bridge CFStringRef)string;
     CFIndex length = CFStringGetLength(stringRef);
     const unichar* chars = CFStringGetCharactersPtr(stringRef);
-    if(is_likely(chars == NULL))
+    likely_if(chars == NULL)
     {
-        if(is_unlikely(length > KSJSON_ScratchBuffSize))
+        likely_if(length <= KSJSON_ScratchBuffSize)
         {
-            memory = malloc(length * sizeof(*chars));
-            if(is_unlikely(memory == NULL))
+            chars = context->scratchBuffer;
+        }
+        else
+        {
+            memory = malloc((unsigned int)length * sizeof(*chars));
+            unlikely_if(memory == NULL)
             {
                 NSLog(@"KSJSON: Out of memory");
                 return false;
             }
             chars = memory;
         }
-        else
-        {
-            chars = context->scratchBuffer;
-        }
-        CFStringGetCharacters(stringRef, CFRangeMake(0, length), (UniChar*)chars);
+        CFStringGetCharacters(stringRef,
+                              CFRangeMake(0, length),
+                              (UniChar*)chars);
     }
     const unichar* end = chars + length;
     
@@ -624,11 +638,13 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
     const unichar* nextEscape = ch;
     for(; nextEscape < end; nextEscape++)
     {
-        if(is_unlikely(*nextEscape == '\\' || *nextEscape == '"' || *nextEscape < ' '))
+        unlikely_if(*nextEscape == '\\' ||
+                    *nextEscape == '"' ||
+                    *nextEscape < ' ')
         {
-            if(is_likely(nextEscape > ch))
+            likely_if(nextEscape > ch)
             {
-                serializeChars(context, ch, nextEscape - ch);
+                serializeChars(context, ch, (unsigned int)(nextEscape - ch));
             }
             ch = nextEscape + 1;
             switch(*nextEscape)
@@ -660,42 +676,44 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
             }
         }
     }
-    if(is_likely(nextEscape > ch))
+    likely_if(nextEscape > ch)
     {
-        serializeChars(context, ch, nextEscape - ch);
+        serializeChars(context, ch, (unsigned int)(nextEscape - ch));
     }
     
     serializeChar(context, '"');
     
-    if(is_unlikely(memory != NULL))
+    unlikely_if(memory != NULL)
     {
         free(memory);
     }
     return true;
 }
 
-static void serializeNumberString(KSJSONSerializeContext* context, const char* numberString)
+static void serializeNumberString(KSJSONSerializeContext* context,
+                                  const char* numberString)
 {
     const char* end = numberString + strlen(numberString);
     for(const char* ch = numberString; ch < end; ch++)
     {
-        serializeChar(context, *ch);
+        serializeChar(context, (unichar)*ch);
     }
 }
 
-static void serializeInteger(KSJSONSerializeContext* context, long long value)
+static void serializeInteger(KSJSONSerializeContext* context,
+                             long long value)
 {
-    if(is_unlikely(value == 0))
+    unlikely_if(value == 0)
     {
         serializeChar(context, '0');
         return;
     }
     
-    unsigned long long uValue = value;
+    unsigned long long uValue = (unsigned long long)value;
     if(value < 0)
     {
         serializeChar(context, '-');
-        uValue = -value;
+        uValue = (unsigned long long)-value;
     }
     unichar buff[30];
     unichar* ptr = buff + 30;
@@ -703,12 +721,13 @@ static void serializeInteger(KSJSONSerializeContext* context, long long value)
     for(;uValue != 0; uValue /= 10)
     {
         ptr--;
-        *ptr = (uValue % 10) + '0';
+        *ptr = (unichar)((uValue % 10) + '0');
     }
-    serializeChars(context, ptr, buff + 30 - ptr);
+    serializeChars(context, ptr, (unsigned int)(buff + 30 - ptr));
 }
 
-static bool serializeNumber(KSJSONSerializeContext* context, NSNumber* number)
+static bool serializeNumber(KSJSONSerializeContext* context,
+                            NSNumber* number)
 {
     CFNumberRef numberRef = (__bridge CFNumberRef)number;
     CFNumberType numberType = CFNumberGetType(numberRef);
@@ -880,7 +899,7 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     Class cls = object_getClass(object);
     for(KSJSON_Class i = 0; i < KSJSON_ClassCount; i++)
     {
-        if(g_classCache[i] == cls)
+        unlikely_if(g_classCache[i] == cls)
         {
             return g_serializeFunctions[i](context, object);
         }
@@ -920,18 +939,21 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
 
 + (NSString*) serializeObject:(id) object
 {
-    if(is_unlikely(![object isKindOfClass:[NSArray class]] &&
-                   ![object isKindOfClass:[NSDictionary class]]))
+    unlikely_if(![object isKindOfClass:[NSArray class]] &&
+                ![object isKindOfClass:[NSDictionary class]])
     {
         NSLog(@"KSJSON: Top level object must be an array or dictionary.");
         return nil;
     }
     KSJSONSerializeContext context;
     serializeInit(&context);
-    if(is_likely(serializeObject(&context, object)))
+    
+    likely_if(serializeObject(&context, object))
     {
         return serializeFinish(&context);
     }
+    
+    serializeAbort(&context);
     return nil;
 }
 
@@ -940,22 +962,23 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     void* memory = NULL;
     unsigned int length = [jsonString length];
     const unichar* chars = CFStringGetCharactersPtr((__bridge CFStringRef)jsonString);
-    if(chars == NULL)
+    likely_if(chars == NULL)
     {
         memory = malloc(length * sizeof(*chars));
-        [jsonString getCharacters:(unichar*)memory range:NSMakeRange(0, length)];
+        [jsonString getCharacters:(unichar*)memory
+                            range:NSMakeRange(0, length)];
         chars = memory;
     }
     const unichar* start = chars;
     const unichar* end = chars + length;
     
     id result = deserializeJSON(&chars, end);
-    if(result == nil)
+    unlikely_if(result == nil)
     {
         NSLog(@"At offset %d", chars - start);
     }
     
-    if(memory != NULL)
+    likely_if(memory != NULL)
     {
         free(memory);
     }
