@@ -15,13 +15,15 @@ Usage
 
 ### Serialize:
 
+    NSError* error;
     id container = [somewhere getContainer];
-    NSString* jsonString = [KSJSON serializeObject:container];
+    NSString* jsonString = [KSJSON serializeObject:container error:&error];
 
 ### Deserialize:
 
+    NSError* error;
     NSString* jsonString = [somewhere getJSONString];
-    id container = [KSJSON deserializeString:jsonString];
+    id container = [KSJSON deserializeString:jsonString error:&error];
 
 
 
