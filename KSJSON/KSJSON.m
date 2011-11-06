@@ -279,7 +279,7 @@ static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
     {
         accum *= sign;
         *context->pos = ch;
-        return [NSNumber numberWithLongLong:accum];
+        return cfautoreleased(CFNumberCreate(NULL, kCFNumberLongLongType, &accum));
     }
     
     for(;ch < context->end && isFPChar(*ch); ch++)
@@ -288,8 +288,7 @@ static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
     
     *context->pos = ch;
     
-    NSString* string = [NSString stringWithCharacters:start
-                                               length:(NSUInteger)(ch - start)];
+    NSString* string = cfautoreleased(CFStringCreateWithCharacters(NULL, start, ch - start));
     return [NSDecimalNumber decimalNumberWithString:string];
 }
 
@@ -307,7 +306,8 @@ static NSNumber* deserializeFalse(KSJSONDeserializeContext* context)
         return nil;
     }
     *context->pos += 5;
-    return [NSNumber numberWithBool:NO];
+    char no = 0;
+    return cfautoreleased(CFNumberCreate(NULL, kCFNumberCharType, &no));
 }
 
 static NSNumber* deserializeTrue(KSJSONDeserializeContext* context)
@@ -324,7 +324,8 @@ static NSNumber* deserializeTrue(KSJSONDeserializeContext* context)
         return nil;
     }
     *context->pos += 4;
-    return [NSNumber numberWithBool:YES];
+    char yes = 1;
+    return cfautoreleased(CFNumberCreate(NULL, kCFNumberCharType, &yes));
 }
 
 static NSNull* deserializeNull(KSJSONDeserializeContext* context)
@@ -341,7 +342,7 @@ static NSNull* deserializeNull(KSJSONDeserializeContext* context)
         return nil;
     }
     *context->pos += 4;
-    return [NSNull null];
+    return (__bridge id)kCFNull;
 }
 
 static id deserializeElement(KSJSONDeserializeContext* context)
@@ -375,7 +376,9 @@ static id deserializeElement(KSJSONDeserializeContext* context)
 static id deserializeArray(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
-    NSMutableArray* array = [NSMutableArray array];
+    CFMutableArrayRef arrayRef = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
+    NSMutableArray* array = cfautoreleased(arrayRef);
+
     while(*context->pos < context->end)
     {
         skipWhitespace(*context->pos, context->end);
@@ -394,7 +397,7 @@ static id deserializeArray(KSJSONDeserializeContext* context)
         {
             (*context->pos)++;
         }
-        [array addObject:element];
+        CFArrayAppendValue(arrayRef, (__bridge CFTypeRef)element);
     }
     makeError(context->error, @"Unterminated array");
     return nil;
@@ -403,7 +406,9 @@ static id deserializeArray(KSJSONDeserializeContext* context)
 static id deserializeDictionary(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
-    NSMutableDictionary* dict = [NSMutableDictionary dictionary];
+    CFMutableDictionaryRef dictRef = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    NSMutableDictionary* dict = cfautoreleased(dictRef);
+
     while(*context->pos < context->end)
     {
         skipWhitespace(*context->pos, context->end);
@@ -434,7 +439,7 @@ static id deserializeDictionary(KSJSONDeserializeContext* context)
         {
             (*context->pos)++;
         }
-        [dict setValue:element forKey:name];
+        CFDictionarySetValue(dictRef, (__bridge CFTypeRef)name, (__bridge CFTypeRef)element);
     }
     makeError(context->error, @"Unterminated object");
     return nil;
