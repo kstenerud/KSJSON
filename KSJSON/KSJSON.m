@@ -666,6 +666,11 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
     void* memory = NULL;
     CFStringRef stringRef = (__bridge CFStringRef)string;
     CFIndex length = CFStringGetLength(stringRef);
+    unlikely_if(length == 0)
+    {
+        serialize2Chars(context, '"', '"');
+        return true;
+    }
     const unichar* chars = CFStringGetCharactersPtr(stringRef);
     likely_if(chars == NULL)
     {

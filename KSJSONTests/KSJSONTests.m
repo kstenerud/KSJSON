@@ -1033,7 +1033,6 @@
     id result = [KSJSON deserializeString:jsonString error:&error];
     STAssertNil(result, @"");
     STAssertNotNil(error, @"");
-    NSLog(@"%@", error);
 }
 
 - (void)testDeserializeDictionaryBadElement
