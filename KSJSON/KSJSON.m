@@ -48,6 +48,14 @@
 #define likely_if(x) if(__builtin_expect(x,1))
 #define unlikely_if(x) if(__builtin_expect(x,0))
 
+#if __has_feature(objc_arc)
+    #define autoreleased(X) (X)
+    #define cfautoreleased(X) ((__bridge_transfer id)(X))
+#else
+    #define autoreleased(X) [(X) autorelease]
+    #define cfautoreleased(X) [((__bridge_transfer id)(X)) autorelease]
+#endif
+
 
 typedef struct
 {
@@ -83,7 +91,7 @@ static void makeError(NSError** error, NSString* fmt, ...)
     {
         va_list args;
         va_start(args, fmt);
-        NSString* desc = [[NSString alloc] initWithFormat:fmt arguments:args];
+        NSString* desc = autoreleased([[NSString alloc] initWithFormat:fmt arguments:args]);
         va_end(args);
         *error = [NSError errorWithDomain:@"KSJSON"
                                      code:1
@@ -120,7 +128,9 @@ static NSString* parseString(const unichar* ch,
 {
     NSString* result = nil;
     unsigned int length = (unsigned int)(end - ch);
-    unichar* string = malloc(length * sizeof(*string));
+    unichar* string = CFAllocatorAllocate(NULL,
+                                          (CFIndex)(length * sizeof(*string)),
+                                          0);
     unlikely_if(string == NULL)
     {
         makeError(error, @"Out of memory");
@@ -181,9 +191,13 @@ static NSString* parseString(const unichar* ch,
         }
     }
     
-    result = [NSString stringWithCharacters:string length:length];
+    return cfautoreleased(CFStringCreateWithCharactersNoCopy(NULL,
+                                                             string,
+                                                             (CFIndex)length,
+                                                             NULL));
+
 fail:
-    free(string);
+    CFAllocatorDeallocate(NULL, string);
     return result;
 }
 
@@ -216,6 +230,12 @@ static NSString* deserializeString(KSJSONDeserializeContext* context)
     }
     
     *context->pos = ch + 1;
+    unlikely_if(start == ch)
+    {
+        return cfautoreleased(CFStringCreateWithCString(NULL,
+                                                        "",
+                                                        kCFStringEncodingUTF8));
+    }
     return parseString(start, ch, context->error);
 }
 
@@ -464,7 +484,9 @@ static bool serializeInit(KSJSONSerializeContext* context)
 {
     context->index = 0;
     context->size = KSJSON_InitialBuffSize;
-    context->buffer = malloc(sizeof(context->buffer[0]) * context->size);
+    context->buffer = CFAllocatorAllocate(NULL,
+                                          (CFIndex)(sizeof(context->buffer[0]) * context->size),
+                                          0);
     unlikely_if(context->buffer == NULL)
     {
         makeError(context->error, @"Out of memory");
@@ -480,8 +502,10 @@ static bool serializeRealloc(KSJSONSerializeContext* context,
     {
         context->size *= 2;
     }
-    context->buffer = realloc(context->buffer,
-                              sizeof(context->buffer[0]) * context->size);
+    context->buffer = CFAllocatorReallocate(NULL,
+                                            context->buffer,
+                                            (CFIndex)(sizeof(context->buffer[0]) * context->size),
+                                            0);
     unlikely_if(context->buffer == NULL)
     {
         makeError(context->error, @"Out of memory");
@@ -492,15 +516,15 @@ static bool serializeRealloc(KSJSONSerializeContext* context,
 
 static NSString* serializeFinish(KSJSONSerializeContext* context)
 {
-    NSString* string = [NSString stringWithCharacters:context->buffer
-                                               length:context->index];
-    free(context->buffer);
-    return string;
+    return cfautoreleased(CFStringCreateWithCharactersNoCopy(NULL,
+                                                             context->buffer,
+                                                             (CFIndex)context->index,
+                                                             NULL));
 }
 
 static void serializeAbort(KSJSONSerializeContext* context)
 {
-    free(context->buffer);
+    CFAllocatorDeallocate(NULL, context->buffer);
 }
 
 static void serializeChar(KSJSONSerializeContext* context, const unichar ch)
@@ -763,7 +787,10 @@ static bool serializeNumber(KSJSONSerializeContext* context,
     switch(numberType)
     {
         case kCFNumberCharType:
-            if([number boolValue])
+        {
+            char value;
+            CFNumberGetValue(numberRef, numberType, &value);
+            if(value)
             {
                 serializeChars(context, g_true, 4);
             }
@@ -772,6 +799,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
                 serializeChars(context, g_false, 5);
             }
             return true;
+        }
         case kCFNumberFloatType:
         {
             float value;
@@ -992,13 +1020,13 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
         *error = nil;
     }
     void* memory = NULL;
-    unsigned int length = [jsonString length];
-    const unichar* chars = CFStringGetCharactersPtr((__bridge CFStringRef)jsonString);
+    CFStringRef stringRef = (__bridge CFStringRef) jsonString;
+    CFIndex length = CFStringGetLength(stringRef);
+    const unichar* chars = CFStringGetCharactersPtr(stringRef);
     likely_if(chars == NULL)
     {
-        memory = malloc(length * sizeof(*chars));
-        [jsonString getCharacters:(unichar*)memory
-                            range:NSMakeRange(0, length)];
+        memory = malloc((unsigned int)length * sizeof(*chars));
+        CFStringGetCharacters(stringRef, CFRangeMake(0, length), (UniChar*)memory);
         chars = memory;
     }
     const unichar* start = chars;
@@ -1011,7 +1039,7 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     };
     
     id result = deserializeJSON(&context);
-    unlikely_if(*error != nil)
+    unlikely_if(error != nil && *error != nil)
     {
         NSString* desc = [(*error).userInfo valueForKey:NSLocalizedDescriptionKey];
         desc = [desc stringByAppendingFormat:@" (at offset %d)", chars - start];

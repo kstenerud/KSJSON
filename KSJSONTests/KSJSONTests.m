@@ -767,6 +767,24 @@
     STAssertEqualObjects(result, original, @"");
 }
 
+- (void) testSerializeDeserializeEmptyString
+{
+    NSError* error = (NSError*)self;
+    NSString* string = @"";
+    NSString* expected = @"[\"\"]";
+    id original = [NSArray arrayWithObjects:
+                   string,
+                   nil];
+    NSString* jsonString = [KSJSON serializeObject:original error:&error];
+    STAssertNotNil(jsonString, @"");
+    STAssertNil(error, @"");
+    STAssertEqualObjects(jsonString, expected, @"");
+    id result = [KSJSON deserializeString:jsonString error:&error];
+    STAssertNotNil(result, @"");
+    STAssertNil(error, @"");
+    STAssertEqualObjects(result, original, @"");
+}
+
 
 - (void) testSerializeDeserializeBigString
 {
