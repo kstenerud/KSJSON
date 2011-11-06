@@ -37,17 +37,21 @@
  *
  * @param object The object to serialize. Must be an array or dictionary.
  *
+ * @param error Placeholder for any errors. Ignored if nil.
+ *
  * @return The JSON serialized string or nil if an error occurred.
  */
-+ (NSString*) serializeObject:(id) object;
++ (NSString*) serializeObject:(id) object error:(NSError**) error;
 
 /** Deserialize a JSON string into an object hierarchy.
  * Returns nil on error and prints out diagnostic messages.
  *
  * @param jsonString the JSON encoded string.
  *
+ * @param error Placeholder for any errors. Ignored if nil.
+ *
  * @return the resulting object hierarchy or nil if an error occurred.
  */
-+ (id) deserializeString:(NSString*) jsonString;
++ (id) deserializeString:(NSString*) jsonString error:(NSError**) error;
 
 @end

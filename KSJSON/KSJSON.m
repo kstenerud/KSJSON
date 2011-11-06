@@ -49,12 +49,20 @@
 #define unlikely_if(x) if(__builtin_expect(x,0))
 
 
-static id deserializeJSON(const unichar** pos, const unichar* end);
-static id deserializeElement(const unichar** pos, const unichar* end);
-static id deserializeArray(const unichar** pos, const unichar* end);
-static id deserializeDictionary(const unichar** pos, const unichar* end);
-static NSString* deserializeString(const unichar** pos, const unichar* end);
+typedef struct
+{
+    const unichar** pos;
+    const unichar* end;
+    __autoreleasing NSError** error;
+} KSJSONDeserializeContext;
 
+
+
+static id deserializeJSON(KSJSONDeserializeContext* context);
+static id deserializeElement(KSJSONDeserializeContext* context);
+static id deserializeArray(KSJSONDeserializeContext* context);
+static id deserializeDictionary(KSJSONDeserializeContext* context);
+static NSString* deserializeString(KSJSONDeserializeContext* context);
 
 static unichar g_hexConversion[] =
 {
@@ -69,7 +77,24 @@ static unichar g_hexConversion[] =
 static unsigned int g_hexConversionEnd = sizeof(g_hexConversion) /
 sizeof(*g_hexConversion);
 
-static bool parseUnicodeSequence(const unichar* start, unichar* dst)
+static void makeError(NSError** error, NSString* fmt, ...)
+{
+    if(error != nil)
+    {
+        va_list args;
+        va_start(args, fmt);
+        NSString* desc = [[NSString alloc] initWithFormat:fmt arguments:args];
+        va_end(args);
+        *error = [NSError errorWithDomain:@"KSJSON"
+                                     code:1
+                                 userInfo:[NSDictionary dictionaryWithObject:desc
+                                                                      forKey:NSLocalizedDescriptionKey]];
+    }
+}
+
+static bool parseUnicodeSequence(const unichar* start,
+                                 unichar* dst,
+                                 NSError** error)
 {
     unichar accum = 0;
     const unichar* end = start + 4;
@@ -80,7 +105,7 @@ static bool parseUnicodeSequence(const unichar* start, unichar* dst)
                     next >= g_hexConversionEnd ||
                     g_hexConversion[next] == 0x77)
         {
-            NSLog(@"KSJSON: Invalid unicode sequence");
+            makeError(error, @"Invalid unicode sequence");
             return false;
         }
         accum = (unichar)((accum << 4) + g_hexConversion[next]);
@@ -89,14 +114,16 @@ static bool parseUnicodeSequence(const unichar* start, unichar* dst)
     return true;
 }
 
-static NSString* parseString(const unichar* ch, const unichar* end)
+static NSString* parseString(const unichar* ch,
+                             const unichar* end,
+                             NSError** error)
 {
     NSString* result = nil;
     unsigned int length = (unsigned int)(end - ch);
     unichar* string = malloc(length * sizeof(*string));
     unlikely_if(string == NULL)
     {
-        NSLog(@"KSJSON: Out of memory");
+        makeError(error, @"Out of memory");
         return nil;
     }
     unichar* pStr = string;
@@ -111,11 +138,6 @@ static NSString* parseString(const unichar* ch, const unichar* end)
         {
             ch++;
             length--; // Skipped a backslash.
-            unlikely_if(ch >= end)
-            {
-                NSLog(@"KSJSON: Unterminated escape sequence");
-                goto fail;
-            }
             switch(*ch)
             {
                 case '\\':
@@ -142,10 +164,10 @@ static NSString* parseString(const unichar* ch, const unichar* end)
                     ch++;
                     unlikely_if(ch > end - 4)
                 {
-                    NSLog(@"KSJSON: Unterminated escape sequence");
+                    makeError(error, @"Unterminated escape sequence");
                     goto fail;
                 }
-                    unlikely_if(!parseUnicodeSequence(ch, pStr++))
+                    unlikely_if(!parseUnicodeSequence(ch, pStr++, error))
                 {
                     goto fail;
                 }
@@ -153,7 +175,7 @@ static NSString* parseString(const unichar* ch, const unichar* end)
                     length -= 4; // Replaced 5 chars with 1.
                     break;
                 default:
-                    NSLog(@"KSJSON: Invalid escape sequence");
+                    makeError(error, @"Invalid escape sequence");
                     goto fail;
             }
         }
@@ -165,11 +187,17 @@ fail:
     return result;
 }
 
-static NSString* deserializeString(const unichar** pos, const unichar* end)
+static NSString* deserializeString(KSJSONDeserializeContext* context)
 {
-    const unichar* ch = *pos + 1;
+    const unichar* ch = *context->pos;
+    unlikely_if(*ch != '"')
+    {
+        makeError(context->error, @"Expected a string");
+        return nil;
+    }
+    ch++;
     const unichar* start = ch;
-    for(;ch < end; ch++)
+    for(;ch < context->end; ch++)
     {
         unlikely_if(*ch == '\\')
         {
@@ -181,14 +209,14 @@ static NSString* deserializeString(const unichar** pos, const unichar* end)
         }
     }
     
-    unlikely_if(ch >= end)
+    unlikely_if(ch >= context->end)
     {
-        NSLog(@"KSJSON: Unterminated string");
+        makeError(context->error, @"Unterminated string");
         return nil;
     }
     
-    *pos = ch + 1;
-    return parseString(start, ch);
+    *context->pos = ch + 1;
+    return parseString(start, ch, context->error);
 }
 
 
@@ -206,10 +234,10 @@ static bool isFPChar(unichar ch)
     }
 }
 
-static NSNumber* deserializeNumber(const unichar** pos, const unichar* end)
+static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
 {
-    const unichar* start = *pos;
-    const unichar* ch = *pos;
+    const unichar* start = *context->pos;
+    const unichar* ch = start;
     long long accum = 0;
     long long sign = *ch == '-' ? -1 : 1;
     if(sign == -1)
@@ -217,7 +245,7 @@ static NSNumber* deserializeNumber(const unichar** pos, const unichar* end)
         ch++;
     }
     
-    for(;ch < end && isdigit(*ch); ch++)
+    for(;ch < context->end && isdigit(*ch); ch++)
     {
         accum = accum * 10 + (*ch - '0');
         unlikely_if(accum < 0)
@@ -230,185 +258,184 @@ static NSNumber* deserializeNumber(const unichar** pos, const unichar* end)
     if(!isFPChar(*ch))
     {
         accum *= sign;
-        *pos = ch;
+        *context->pos = ch;
         return [NSNumber numberWithLongLong:accum];
     }
     
-    for(;ch < end && isFPChar(*ch); ch++)
+    for(;ch < context->end && isFPChar(*ch); ch++)
     {
     }
     
-    *pos = ch;
+    *context->pos = ch;
     
     NSString* string = [NSString stringWithCharacters:start
                                                length:(NSUInteger)(ch - start)];
     return [NSDecimalNumber decimalNumberWithString:string];
 }
 
-static NSNumber* deserializeFalse(const unichar** pos, const unichar* end)
+static NSNumber* deserializeFalse(KSJSONDeserializeContext* context)
 {
-    const unichar* ch = *pos;
-    unlikely_if(end - ch < 5)
+    const unichar* ch = *context->pos;
+    unlikely_if(context->end - ch < 5)
     {
-        NSLog(@"KSJSON: Premature end of JSON data");
+        makeError(context->error, @"Premature end of JSON data");
         return nil;
     }
     unlikely_if(!(ch[1] == 'a' && ch[2] == 'l' && ch[3] == 's' && ch[4] == 'e'))
     {
-        NSLog(@"KSJSON: Invalid characters while parsing 'false'");
+        makeError(context->error, @"Invalid characters while parsing 'false'");
         return nil;
     }
-    *pos += 5;
+    *context->pos += 5;
     return [NSNumber numberWithBool:NO];
 }
 
-static NSNumber* deserializeTrue(const unichar** pos, const unichar* end)
+static NSNumber* deserializeTrue(KSJSONDeserializeContext* context)
 {
-    const unichar* ch = *pos;
-    unlikely_if(end - ch < 4)
+    const unichar* ch = *context->pos;
+    unlikely_if(context->end - ch < 4)
     {
-        NSLog(@"KSJSON: Premature end of JSON data");
+        makeError(context->error, @"Premature end of JSON data");
         return nil;
     }
     unlikely_if(!(ch[1] == 'r' && ch[2] == 'u' && ch[3] == 'e'))
     {
-        NSLog(@"KSJSON: Invalid characters while parsing 'true'");
+        makeError(context->error, @"Invalid characters while parsing 'true'");
         return nil;
     }
-    *pos += 4;
+    *context->pos += 4;
     return [NSNumber numberWithBool:YES];
 }
 
-static NSNull* deserializeNull(const unichar** pos, const unichar* end)
+static NSNull* deserializeNull(KSJSONDeserializeContext* context)
 {
-    const unichar* ch = *pos;
-    unlikely_if(end - ch < 4)
+    const unichar* ch = *context->pos;
+    unlikely_if(context->end - ch < 4)
     {
-        NSLog(@"KSJSON: Premature end of JSON data");
+        makeError(context->error, @"Premature end of JSON data");
         return nil;
     }
     unlikely_if(!(ch[1] == 'u' && ch[2] == 'l' && ch[3] == 'l'))
     {
-        NSLog(@"KSJSON: Invalid characters while parsing 'null'");
+        makeError(context->error, @"Invalid characters while parsing 'null'");
         return nil;
     }
-    *pos += 4;
+    *context->pos += 4;
     return [NSNull null];
 }
 
-static id deserializeElement(const unichar** pos, const unichar* end)
+static id deserializeElement(KSJSONDeserializeContext* context)
 {
-    skipWhitespace(*pos, end);
+    skipWhitespace(*context->pos, context->end);
     
-    switch(**pos)
+    switch(**context->pos)
     {
         case ARRAY_BEGIN:
-            return deserializeArray(pos, end);
+            return deserializeArray(context);
         case DICTIONARY_BEGIN:
-            return deserializeDictionary(pos, end);
+            return deserializeDictionary(context);
         case STRING_BEGIN:
-            return deserializeString(pos, end);
+            return deserializeString(context);
         case FALSE_BEGIN:
-            return deserializeFalse(pos, end);
+            return deserializeFalse(context);
         case TRUE_BEGIN:
-            return deserializeTrue(pos, end);
+            return deserializeTrue(context);
         case NULL_BEGIN:
-            return deserializeNull(pos, end);
+            return deserializeNull(context);
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
         case '-': // Begin number
-            return deserializeNumber(pos, end);
+            return deserializeNumber(context);
     }
-    NSLog(@"KSJSON: Unexpected character: %c", **pos);
+    makeError(context->error, @"Unexpected character: %c", **context->pos);
     return nil;
 }
 
 
-static id deserializeArray(const unichar** pos, const unichar* end)
+static id deserializeArray(KSJSONDeserializeContext* context)
 {
-    (*pos)++;
+    (*context->pos)++;
     NSMutableArray* array = [NSMutableArray array];
-    while(*pos < end)
+    while(*context->pos < context->end)
     {
-        skipWhitespace(*pos, end);
-        unlikely_if(**pos == ARRAY_END)
+        skipWhitespace(*context->pos, context->end);
+        unlikely_if(**context->pos == ARRAY_END)
         {
-            (*pos)++;
+            (*context->pos)++;
             return array;
         }
-        id element = deserializeElement(pos, end);
+        id element = deserializeElement(context);
         unlikely_if(element == nil)
         {
             return nil;
         }
-        skipWhitespace(*pos, end);
-        likely_if(**pos == ELEMENT_SEPARATOR)
+        skipWhitespace(*context->pos, context->end);
+        likely_if(**context->pos == ELEMENT_SEPARATOR)
         {
-            (*pos)++;
+            (*context->pos)++;
         }
         [array addObject:element];
     }
-    NSLog(@"KSJSON: Unterminated array");
+    makeError(context->error, @"Unterminated array");
     return nil;
 }
 
-static id deserializeDictionary(const unichar** pos, const unichar* end)
+static id deserializeDictionary(KSJSONDeserializeContext* context)
 {
-    (*pos)++;
+    (*context->pos)++;
     NSMutableDictionary* dict = [NSMutableDictionary dictionary];
-    while(*pos < end)
+    while(*context->pos < context->end)
     {
-        skipWhitespace(*pos, end);
-        unlikely_if(**pos == DICTIONARY_END)
+        skipWhitespace(*context->pos, context->end);
+        unlikely_if(**context->pos == DICTIONARY_END)
         {
-            (*pos)++;
+            (*context->pos)++;
             return dict;
         }
-        NSString* name = deserializeString(pos, end);
+        NSString* name = deserializeString(context);
         unlikely_if(name == nil)
         {
             return nil;
         }
-        skipWhitespace(*pos, end);
-        unlikely_if(**pos != NAME_SEPARATOR)
+        skipWhitespace(*context->pos, context->end);
+        unlikely_if(**context->pos != NAME_SEPARATOR)
         {
-            NSLog(@"KSJSON: Expected name separator");
+            makeError(context->error, @"Expected name separator");
+            return nil;
         }
-        (*pos)++;
-        id element = deserializeElement(pos, end);
+        (*context->pos)++;
+        id element = deserializeElement(context);
         unlikely_if(element == nil)
         {
             return nil;
         }
-        skipWhitespace(*pos, end);
-        likely_if(**pos == ELEMENT_SEPARATOR)
+        skipWhitespace(*context->pos, context->end);
+        likely_if(**context->pos == ELEMENT_SEPARATOR)
         {
-            (*pos)++;
+            (*context->pos)++;
         }
         [dict setValue:element forKey:name];
     }
-    NSLog(@"KSJSON: Unterminated object");
+    makeError(context->error, @"Unterminated object");
     return nil;
 }
 
 
-static id deserializeJSON(const unichar** pos, const unichar* end)
+static id deserializeJSON(KSJSONDeserializeContext* context)
 {
-    skipWhitespace(*pos, end);
-    switch(**pos)
+    skipWhitespace(*context->pos, context->end);
+    switch(**context->pos)
     {
         case ARRAY_BEGIN:
-            return deserializeArray(pos, end);
+            return deserializeArray(context);
             break;
         case DICTIONARY_BEGIN:
-            return deserializeDictionary(pos, end);
+            return deserializeDictionary(context);
             break;
     }
-    NSLog(@"KSJSON: Unexpected character: %c", **pos);
+    makeError(context->error, @"Unexpected character: %c", **context->pos);
     return nil;
 }
-
-
 
 
 
@@ -422,6 +449,7 @@ typedef struct
     unichar scratchBuffer[KSJSON_ScratchBuffSize];
     unsigned int size;
     unsigned int index;
+    __autoreleasing NSError** error;
 } KSJSONSerializeContext;
 
 static unichar g_false[] = {'f','a','l','s','e'};
@@ -439,7 +467,7 @@ static bool serializeInit(KSJSONSerializeContext* context)
     context->buffer = malloc(sizeof(context->buffer[0]) * context->size);
     unlikely_if(context->buffer == NULL)
     {
-        NSLog(@"KSJSON: Out of memory");
+        makeError(context->error, @"Out of memory");
         return false;
     }
     return true;
@@ -456,7 +484,7 @@ static bool serializeRealloc(KSJSONSerializeContext* context,
                               sizeof(context->buffer[0]) * context->size);
     unlikely_if(context->buffer == NULL)
     {
-        NSLog(@"KSJSON: Out of memory");
+        makeError(context->error, @"Out of memory");
         return false;
     }
     return true;
@@ -568,7 +596,7 @@ static bool serializeDictionary(KSJSONSerializeContext* context,
         memory = malloc(sizeof(void*) * (unsigned int)count * 2);
         unlikely_if(memory == NULL)
         {
-            NSLog(@"KSJSON: Out of memory");
+            makeError(context->error, @"Out of memory");
             return false;
         }
         keys = memory;
@@ -621,7 +649,7 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
             memory = malloc((unsigned int)length * sizeof(*chars));
             unlikely_if(memory == NULL)
             {
-                NSLog(@"KSJSON: Out of memory");
+                makeError(context->error, @"Out of memory");
                 return false;
             }
             chars = memory;
@@ -671,8 +699,8 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
                     serialize2Chars(context, '\\', 't');
                     break;
                 default:
-                    // TODO: Encode hex sequence? OR error?
-                    break;
+                    makeError(context->error, @"Invalid character: 0x%02x", *nextEscape);
+                    return false;
             }
         }
     }
@@ -864,12 +892,6 @@ static bool serializeNull(KSJSONSerializeContext* context, id object)
     return true;
 }
 
-static bool serializeUnknown(KSJSONSerializeContext* context, id object)
-{
-    NSLog(@"KSJSON: Cannot serialize object of type %@", [object class]);
-    return false;
-}
-
 
 typedef bool (*serializeFunction)(KSJSONSerializeContext* context, id object);
 
@@ -891,7 +913,6 @@ static const serializeFunction g_serializeFunctions[] =
     serializeArray,
     serializeDictionary,
     serializeNull,
-    serializeUnknown,
 };
 
 static bool serializeObject(KSJSONSerializeContext* context, id object)
@@ -926,9 +947,11 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     {
         classType = KSJSON_ClassNull;
     }
-    else if(object == nil)
+    else
     {
-        classType = KSJSON_ClassNull;
+        makeError(context->error,
+                  @"Cannot serialize object of type %@", [object class]);
+        return false;
     }
     
     g_classCache[classType] = cls;
@@ -937,15 +960,20 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
 
 @implementation KSJSON
 
-+ (NSString*) serializeObject:(id) object
++ (NSString*) serializeObject:(id) object error:(NSError**) error
 {
+    if(error != nil)
+    {
+        *error = nil;
+    }
     unlikely_if(![object isKindOfClass:[NSArray class]] &&
                 ![object isKindOfClass:[NSDictionary class]])
     {
-        NSLog(@"KSJSON: Top level object must be an array or dictionary.");
+        makeError(error, @"Top level object must be an array or dictionary.");
         return nil;
     }
     KSJSONSerializeContext context;
+    context.error = error;
     serializeInit(&context);
     
     likely_if(serializeObject(&context, object))
@@ -957,8 +985,12 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     return nil;
 }
 
-+ (id) deserializeString:(NSString*) jsonString
++ (id) deserializeString:(NSString*) jsonString error:(NSError**) error
 {
+    if(error != nil)
+    {
+        *error = nil;
+    }
     void* memory = NULL;
     unsigned int length = [jsonString length];
     const unichar* chars = CFStringGetCharactersPtr((__bridge CFStringRef)jsonString);
@@ -971,11 +1003,22 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     }
     const unichar* start = chars;
     const unichar* end = chars + length;
-    
-    id result = deserializeJSON(&chars, end);
-    unlikely_if(result == nil)
+    KSJSONDeserializeContext context =
     {
-        NSLog(@"At offset %d", chars - start);
+        &chars,
+        end,
+        error
+    };
+    
+    id result = deserializeJSON(&context);
+    unlikely_if(*error != nil)
+    {
+        NSString* desc = [(*error).userInfo valueForKey:NSLocalizedDescriptionKey];
+        desc = [desc stringByAppendingFormat:@" (at offset %d)", chars - start];
+        *error = [NSError errorWithDomain:@"KSJSON"
+                                     code:1
+                                 userInfo:[NSDictionary dictionaryWithObject:desc
+                                                                      forKey:NSLocalizedDescriptionKey]];
     }
     
     likely_if(memory != NULL)

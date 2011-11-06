@@ -15,6 +15,7 @@
 		398D0725145E5A9D00E0213B /* libKSJSON.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 398D070D145E5A9C00E0213B /* libKSJSON.a */; };
 		398D072B145E5A9D00E0213B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 398D0729145E5A9D00E0213B /* InfoPlist.strings */; };
 		398D072E145E5A9D00E0213B /* KSJSONTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 398D072D145E5A9D00E0213B /* KSJSONTests.m */; };
+		39B59FA51464C9B500AD2F1B /* libprofile_rt.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 39B59FA41464C9B500AD2F1B /* libprofile_rt.dylib */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +40,7 @@
 		398D0728145E5A9D00E0213B /* KSJSONTests-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "KSJSONTests-Info.plist"; sourceTree = "<group>"; };
 		398D072A145E5A9D00E0213B /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		398D072D145E5A9D00E0213B /* KSJSONTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = KSJSONTests.m; sourceTree = "<group>"; };
+		39B59FA41464C9B500AD2F1B /* libprofile_rt.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libprofile_rt.dylib; path = usr/lib/libprofile_rt.dylib; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				39B59FA51464C9B500AD2F1B /* libprofile_rt.dylib in Frameworks */,
 				398D071F145E5A9C00E0213B /* SenTestingKit.framework in Frameworks */,
 				398D0721145E5A9D00E0213B /* UIKit.framework in Frameworks */,
 				398D0722145E5A9D00E0213B /* Foundation.framework in Frameworks */,
@@ -67,6 +70,7 @@
 		398D0702145E5A9C00E0213B = {
 			isa = PBXGroup;
 			children = (
+				39B59FA41464C9B500AD2F1B /* libprofile_rt.dylib */,
 				398D0712145E5A9C00E0213B /* KSJSON */,
 				398D0726145E5A9D00E0213B /* KSJSONTests */,
 				398D070F145E5A9C00E0213B /* Frameworks */,
@@ -361,6 +365,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				DSTROOT = /tmp/KSJSON.dst;
+				GCC_GENERATE_TEST_COVERAGE_FILES = YES;
+				GCC_INSTRUMENT_PROGRAM_FLOW_ARCS = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
 				OTHER_LDFLAGS = "-ObjC";
@@ -373,6 +379,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				DSTROOT = /tmp/KSJSON.dst;
+				GCC_GENERATE_TEST_COVERAGE_FILES = YES;
+				GCC_INSTRUMENT_PROGRAM_FLOW_ARCS = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
 				OTHER_LDFLAGS = "-ObjC";
@@ -388,11 +396,17 @@
 					"$(SDKROOT)/Developer/Library/Frameworks",
 					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
 				);
+				GCC_GENERATE_TEST_COVERAGE_FILES = YES;
+				GCC_INSTRUMENT_PROGRAM_FLOW_ARCS = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
 				GCC_WARN_PEDANTIC = NO;
 				GCC_WARN_STRICT_SELECTOR_MATCH = NO;
 				INFOPLIST_FILE = "KSJSONTests/KSJSONTests-Info.plist";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(DEVELOPER_DIR)/usr/lib\"",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				WRAPPER_EXTENSION = octest;
 			};
@@ -405,11 +419,17 @@
 					"$(SDKROOT)/Developer/Library/Frameworks",
 					"$(DEVELOPER_LIBRARY_DIR)/Frameworks",
 				);
+				GCC_GENERATE_TEST_COVERAGE_FILES = YES;
+				GCC_INSTRUMENT_PROGRAM_FLOW_ARCS = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "KSJSON/KSJSON-Prefix.pch";
 				GCC_WARN_PEDANTIC = NO;
 				GCC_WARN_STRICT_SELECTOR_MATCH = NO;
 				INFOPLIST_FILE = "KSJSONTests/KSJSONTests-Info.plist";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(DEVELOPER_DIR)/usr/lib\"",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				WRAPPER_EXTENSION = octest;
 			};
