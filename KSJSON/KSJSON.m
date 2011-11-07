@@ -336,63 +336,118 @@ static id deserializeElement(KSJSONDeserializeContext* context)
     return nil;
 }
 
+typedef struct
+{
+    void* valuesOnStack[128];
+    void** values;
+    unsigned int length;
+    unsigned int index;
+    bool onStack;
+} Array;
+
+static void arrayInit(Array* array)
+{
+    array->onStack = true;
+    array->index = 0;
+    array->length = sizeof(array->valuesOnStack) / sizeof(*array->valuesOnStack);
+    array->values = array->valuesOnStack;
+}
+
+static bool arrayAddValue(Array* array, id value, NSError** error)
+{
+    unlikely_if(array->index >= array->length)
+    {
+        array->length *= 2;
+        if(array->onStack)
+        {
+            array->values = malloc(array->length * sizeof(*array->values));
+            array->onStack = false;
+            unlikely_if(array->values == NULL)
+            {
+                makeError(error, @"Out of memory");
+                return false;
+            }
+            memcpy(array->values, array->valuesOnStack, array->index);
+        }
+        else
+        {
+            array->values = realloc(array->values, array->length * sizeof(*array->values));
+            unlikely_if(array->values == NULL)
+            {
+                makeError(error, @"Out of memory");
+                return false;
+            }
+        }
+    }
+    array->values[array->index] = (__bridge void*)value;
+    array->index++;
+    return true;
+}
+
+static void arrayFree(Array* array)
+{
+    if(!array->onStack)
+    {
+        free(array->values);
+    }
+}
 
 static id deserializeArray(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
-    CFMutableArrayRef arrayRef = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
-    NSMutableArray* array = cfautoreleased(arrayRef);
-    
+    Array array;
+    arrayInit(&array);
+
     while(*context->pos < context->end)
     {
         skipWhitespace(*context->pos, context->end);
         unlikely_if(**context->pos == ARRAY_END)
         {
             (*context->pos)++;
-            return array;
+            id result = cfautoreleased(CFArrayCreate(NULL,
+                                                     (const void**)array.values,
+                                                     (CFIndex)array.index,
+                                                     &kCFTypeArrayCallBacks));
+            arrayFree(&array);
+            return result;
         }
         id element = deserializeElement(context);
         unlikely_if(element == nil)
         {
-            return nil;
+            goto failed;
         }
         skipWhitespace(*context->pos, context->end);
         likely_if(**context->pos == ELEMENT_SEPARATOR)
         {
             (*context->pos)++;
         }
-        CFArrayAppendValue(arrayRef, (__bridge CFTypeRef)element);
+        arrayAddValue(&array, element, context->error);
     }
     makeError(context->error, @"Unterminated array");
+
+failed:
+    arrayFree(&array);
     return nil;
 }
 
 typedef struct
 {
+    void* keysOnStack[128];
+    void* valuesOnStack[128];
     void** keys;
     void** values;
     unsigned int length;
     unsigned int index;
+    bool onStack;
 } Dictionary;
 
-static bool dictInit(Dictionary* dict, NSError** error)
+static void dictInit(Dictionary* dict)
 {
+    dict->onStack = true;
     dict->index = 0;
-    dict->length = 64;
-
-    dict->keys = malloc(dict->length * sizeof(*dict->keys));
-    unlikely_if(dict->keys == NULL)
-    {
-        makeError(error, @"Out of memory");
-        return false;
-    }
-    dict->values = malloc(dict->length * sizeof(*dict->values));
-    unlikely_if(dict->values == NULL)
-    {
-        makeError(error, @"Out of memory");
-        return false;
-    }
-    return true;
+    dict->length = sizeof(dict->keysOnStack) / sizeof(*dict->keysOnStack);
+    dict->keys = dict->keysOnStack;
+    dict->values = dict->valuesOnStack;
 }
 
 static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** error)
@@ -400,17 +455,28 @@ static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** err
     unlikely_if(dict->index >= dict->length)
     {
         dict->length *= 2;
-        dict->keys = realloc(dict->keys, dict->length * sizeof(*dict->keys));
-        unlikely_if(dict->keys == NULL)
+        if(dict->onStack)
         {
-            makeError(error, @"Out of memory");
-            return false;
+            dict->keys = malloc(dict->length * sizeof(*dict->keys));
+            dict->values = malloc(dict->length * sizeof(*dict->values));
+            dict->onStack = false;
+            unlikely_if(dict->keys == NULL || dict->values == NULL)
+            {
+                makeError(error, @"Out of memory");
+                return false;
+            }
+            memcpy(dict->keys, dict->keysOnStack, dict->index);
+            memcpy(dict->values, dict->valuesOnStack, dict->index);
         }
-        dict->values = realloc(dict->values, dict->length * sizeof(*dict->values));
-        unlikely_if(dict->values == NULL)
+        else
         {
-            makeError(error, @"Out of memory");
-            return false;
+            dict->keys = realloc(dict->keys, dict->length * sizeof(*dict->keys));
+            dict->values = realloc(dict->values, dict->length * sizeof(*dict->values));
+            unlikely_if(dict->keys == NULL || dict->values == NULL)
+            {
+                makeError(error, @"Out of memory");
+                return false;
+            }
         }
     }
     dict->keys[dict->index] = (__bridge void*)key;
@@ -421,18 +487,18 @@ static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** err
 
 static void dictFree(Dictionary* dict)
 {
-    free(dict->keys);
-    free(dict->values);
+    if(!dict->onStack)
+    {
+        free(dict->keys);
+        free(dict->values);
+    }
 }
 
 static id deserializeDictionary(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
     Dictionary dict;
-    unlikely_if(!dictInit(&dict, context->error))
-    {
-        return nil;
-    }
+    dictInit(&dict);
     
     while(*context->pos < context->end)
     {
@@ -476,7 +542,7 @@ static id deserializeDictionary(KSJSONDeserializeContext* context)
             goto failed;
         }
     }
-
+    
     makeError(context->error, @"Unterminated object");
     
 failed:
