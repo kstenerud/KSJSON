@@ -59,8 +59,8 @@
 
 typedef struct
 {
-    const unichar** pos;
-    const unichar* end;
+    unichar** pos;
+    unichar* end;
     __autoreleasing NSError** error;
 } KSJSONDeserializeContext;
 
@@ -122,23 +122,25 @@ static bool parseUnicodeSequence(const unichar* start,
     return true;
 }
 
-static NSString* parseString(const unichar* ch,
-                             const unichar* end,
-                             NSError** error)
+static NSString* deserializeString(KSJSONDeserializeContext* context)
 {
-    NSString* result = nil;
-    unsigned int length = (unsigned int)(end - ch);
-    unichar* string = CFAllocatorAllocate(NULL,
-                                          (CFIndex)(length * sizeof(*string)),
-                                          0);
-    unlikely_if(string == NULL)
+    unichar* ch = *context->pos;
+    unlikely_if(*ch != '"')
     {
-        makeError(error, @"Out of memory");
+        makeError(context->error, @"Expected a string");
         return nil;
     }
-    unichar* pStr = string;
-    
-    for(;ch < end; ch++)
+    unlikely_if(ch[1] == '"')
+    {
+        *context->pos = ch + 2;
+        return cfautoreleased(CFStringCreateWithCString(NULL,
+                                                        "",
+                                                        kCFStringEncodingUTF8));
+    }
+    ch++;
+    unichar* start = ch;
+    unichar* pStr = start;
+    for(;ch < context->end && *ch != '"'; ch++)
     {
         likely_if(*ch != '\\')
         {
@@ -147,7 +149,6 @@ static NSString* parseString(const unichar* ch,
         else
         {
             ch++;
-            length--; // Skipped a backslash.
             switch(*ch)
             {
                 case '\\':
@@ -172,54 +173,21 @@ static NSString* parseString(const unichar* ch,
                     break;
                 case 'u':
                     ch++;
-                    unlikely_if(ch > end - 4)
+                    unlikely_if(ch > context->end - 4)
                 {
-                    makeError(error, @"Unterminated escape sequence");
-                    goto fail;
+                    makeError(context->error, @"Unterminated escape sequence");
+                    return nil;
                 }
-                    unlikely_if(!parseUnicodeSequence(ch, pStr++, error))
+                    unlikely_if(!parseUnicodeSequence(ch, pStr++, context->error))
                 {
-                    goto fail;
+                    return nil;
                 }
                     ch += 3;
-                    length -= 4; // Replaced 5 chars with 1.
                     break;
                 default:
-                    makeError(error, @"Invalid escape sequence");
-                    goto fail;
+                    makeError(context->error, @"Invalid escape sequence");
+                    return nil;
             }
-        }
-    }
-    
-    return cfautoreleased(CFStringCreateWithCharactersNoCopy(NULL,
-                                                             string,
-                                                             (CFIndex)length,
-                                                             NULL));
-
-fail:
-    CFAllocatorDeallocate(NULL, string);
-    return result;
-}
-
-static NSString* deserializeString(KSJSONDeserializeContext* context)
-{
-    const unichar* ch = *context->pos;
-    unlikely_if(*ch != '"')
-    {
-        makeError(context->error, @"Expected a string");
-        return nil;
-    }
-    ch++;
-    const unichar* start = ch;
-    for(;ch < context->end; ch++)
-    {
-        unlikely_if(*ch == '\\')
-        {
-            ch++;
-        }
-        else unlikely_if(*ch == '"')
-        {
-            break;
         }
     }
     
@@ -230,13 +198,9 @@ static NSString* deserializeString(KSJSONDeserializeContext* context)
     }
     
     *context->pos = ch + 1;
-    unlikely_if(start == ch)
-    {
-        return cfautoreleased(CFStringCreateWithCString(NULL,
-                                                        "",
-                                                        kCFStringEncodingUTF8));
-    }
-    return parseString(start, ch, context->error);
+    return cfautoreleased(CFStringCreateWithCharacters(NULL,
+                                                       start,
+                                                       (CFIndex)(pStr - start)));
 }
 
 
@@ -256,8 +220,8 @@ static bool isFPChar(unichar ch)
 
 static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
 {
-    const unichar* start = *context->pos;
-    const unichar* ch = start;
+    unichar* start = *context->pos;
+    unichar* ch = start;
     long long accum = 0;
     long long sign = *ch == '-' ? -1 : 1;
     if(sign == -1)
@@ -378,7 +342,7 @@ static id deserializeArray(KSJSONDeserializeContext* context)
     (*context->pos)++;
     CFMutableArrayRef arrayRef = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
     NSMutableArray* array = cfautoreleased(arrayRef);
-
+    
     while(*context->pos < context->end)
     {
         skipWhitespace(*context->pos, context->end);
@@ -403,45 +367,120 @@ static id deserializeArray(KSJSONDeserializeContext* context)
     return nil;
 }
 
+typedef struct
+{
+    void** keys;
+    void** values;
+    unsigned int length;
+    unsigned int index;
+} Dictionary;
+
+static bool dictInit(Dictionary* dict, NSError** error)
+{
+    dict->index = 0;
+    dict->length = 64;
+
+    dict->keys = malloc(dict->length * sizeof(*dict->keys));
+    unlikely_if(dict->keys == NULL)
+    {
+        makeError(error, @"Out of memory");
+        return false;
+    }
+    dict->values = malloc(dict->length * sizeof(*dict->values));
+    unlikely_if(dict->values == NULL)
+    {
+        makeError(error, @"Out of memory");
+        return false;
+    }
+    return true;
+}
+
+static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** error)
+{
+    unlikely_if(dict->index >= dict->length)
+    {
+        dict->length *= 2;
+        dict->keys = realloc(dict->keys, dict->length * sizeof(*dict->keys));
+        unlikely_if(dict->keys == NULL)
+        {
+            makeError(error, @"Out of memory");
+            return false;
+        }
+        dict->values = realloc(dict->values, dict->length * sizeof(*dict->values));
+        unlikely_if(dict->values == NULL)
+        {
+            makeError(error, @"Out of memory");
+            return false;
+        }
+    }
+    dict->keys[dict->index] = (__bridge void*)key;
+    dict->values[dict->index] = (__bridge void*)value;
+    dict->index++;
+    return true;
+}
+
+static void dictFree(Dictionary* dict)
+{
+    free(dict->keys);
+    free(dict->values);
+}
+
 static id deserializeDictionary(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
-    CFMutableDictionaryRef dictRef = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    NSMutableDictionary* dict = cfautoreleased(dictRef);
-
+    Dictionary dict;
+    unlikely_if(!dictInit(&dict, context->error))
+    {
+        return nil;
+    }
+    
     while(*context->pos < context->end)
     {
         skipWhitespace(*context->pos, context->end);
         unlikely_if(**context->pos == DICTIONARY_END)
         {
             (*context->pos)++;
-            return dict;
+            id result = cfautoreleased(CFDictionaryCreate(NULL,
+                                                          (const void**)dict.keys,
+                                                          (const void**)dict.values,
+                                                          (CFIndex)dict.index,
+                                                          &kCFTypeDictionaryKeyCallBacks,
+                                                          &kCFTypeDictionaryValueCallBacks));
+            dictFree(&dict);
+            return result;
         }
         NSString* name = deserializeString(context);
         unlikely_if(name == nil)
         {
-            return nil;
+            goto failed;
         }
         skipWhitespace(*context->pos, context->end);
         unlikely_if(**context->pos != NAME_SEPARATOR)
         {
             makeError(context->error, @"Expected name separator");
-            return nil;
+            goto failed;
         }
         (*context->pos)++;
         id element = deserializeElement(context);
         unlikely_if(element == nil)
         {
-            return nil;
+            goto failed;
         }
         skipWhitespace(*context->pos, context->end);
         likely_if(**context->pos == ELEMENT_SEPARATOR)
         {
             (*context->pos)++;
         }
-        CFDictionarySetValue(dictRef, (__bridge CFTypeRef)name, (__bridge CFTypeRef)element);
+        unlikely_if(!dictAddKeyAndValue(&dict, name, element, context->error))
+        {
+            goto failed;
+        }
     }
+
     makeError(context->error, @"Unterminated object");
+    
+failed:
+    dictFree(&dict);
     return nil;
 }
 
@@ -1029,18 +1068,17 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     {
         *error = nil;
     }
-    void* memory = NULL;
     CFStringRef stringRef = (__bridge CFStringRef) jsonString;
     CFIndex length = CFStringGetLength(stringRef);
-    const unichar* chars = CFStringGetCharactersPtr(stringRef);
-    likely_if(chars == NULL)
+    unichar* start = malloc((unsigned int)length * sizeof(*start));
+    unlikely_if(start == NULL)
     {
-        memory = malloc((unsigned int)length * sizeof(*chars));
-        CFStringGetCharacters(stringRef, CFRangeMake(0, length), (UniChar*)memory);
-        chars = memory;
+        makeError(error, @"Out of memory");
+        return nil;
     }
-    const unichar* start = chars;
-    const unichar* end = chars + length;
+    CFStringGetCharacters(stringRef, CFRangeMake(0, length), (UniChar*)start);
+    unichar* chars = start;
+    unichar* end = start + length;
     KSJSONDeserializeContext context =
     {
         &chars,
@@ -1059,10 +1097,7 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
                                                                       forKey:NSLocalizedDescriptionKey]];
     }
     
-    likely_if(memory != NULL)
-    {
-        free(memory);
-    }
+    free(start);
     return result;
 }
 
