@@ -1361,6 +1361,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
  */
 static bool serializeNull(KSJSONSerializeContext* context, CFTypeRef object)
 {
+    #pragma unused(object)
     serializeChars(context, g_null, 4);
     return true;
 }

@@ -30,6 +30,11 @@ with another library.
 KSJSON includes 70 unit tests, which have 90% code coverage.
 
 
+### It's Clean!
+
+KSJSON compiles cleanly with ALL warnings enabled (including pedantic).
+
+
 ### It's Small!
 
 The armv7 object code for KSJSON weighs in at 42 kilobytes.
