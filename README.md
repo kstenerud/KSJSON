@@ -1,17 +1,55 @@
 KSJSON
 ======
 
-Fast JSON serialization and deserialization in Objective-C.
+The fastest JSON parser and serializer for Objective-C.
 
-KSJSON is currently the fastest JSON serializer, and the second fastest
-deserializer, as tested in https://github.com/kstenerud/JSONCompare
 
-KSJSON supports ARC.
+
+Why KSJSON?
+-----------
+
+### It's Fast!
+
+KSJSON is simply the fastest Objective-C based JSON converter there is.
+Benchmarks are available at https://github.com/kstenerud/JSONCompare
+
+
+### It's Simple!
+
+There are two files to add to your project: *KSJSON.h* and *KSJSON.m*.
+
+There are two API calls: *serializeObject* and *deserializeString*. That's it.
+
+No extra dependencies. No special include paths. No extra linker options.
+No pollution of NSArray and friends with helper categories that might clash
+with another library.
+
+
+### It's Reliable!
+
+KSJSON includes 70 unit tests, which have 90% code coverage.
+
+
+### It's Small!
+
+The armv7 object code for KSJSON weighs in at 42 kilobytes.
+
+
+### It supports ARC!
+
+KSJSON supports compiling with or without ARC.
+
+
+
+Installation
+------------
+
+Copy *KSJSON.h* and *KSJSON.m* into your project.
 
 
 
 Usage
-=====
+-----
 
 ### Serialize:
 
@@ -28,7 +66,7 @@ Usage
 
 
 License
-=======
+-------
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

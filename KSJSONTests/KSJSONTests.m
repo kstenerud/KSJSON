@@ -785,32 +785,16 @@
     STAssertEqualObjects(result, original, @"");
 }
 
-
 - (void) testSerializeDeserializeBigString
 {
     NSError* error = (NSError*)self;
-    NSString* string =
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789"
-    @"01234567890123456789012345678901234567890123456789";
+
+    unsigned int length = 500;
+    NSMutableString* string = [NSMutableString stringWithCapacity:length];
+    for(unsigned int i = 0; i < length; i++)
+    {
+        [string appendFormat:@"%d", i%10];
+    }
 
     NSString* expected = [NSString stringWithFormat:@"[\"%@\"]", string];
     id original = [NSArray arrayWithObjects:
@@ -849,22 +833,21 @@
 - (void) testSerializeDeserializeLargeArray
 {
     NSError* error = (NSError*)self;
-    NSString* jsonString = @"["
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
-    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9"
-    "]";
+    unsigned int numEntries = 2000;
+
+    NSMutableString* jsonString = [NSMutableString string];
+    [jsonString appendString:@"["];
+    for(unsigned int i = 0; i < numEntries; i++)
+    {
+        [jsonString appendFormat:@"%d,", i%10];
+    }
+    [jsonString deleteCharactersInRange:NSMakeRange([jsonString length]-1, 1)];
+    [jsonString appendString:@"]"];
+
     id deserialized = [KSJSON deserializeString:jsonString error:&error];
     STAssertNotNil(deserialized, @"");
     STAssertNil(error, @"");
-    STAssertEquals([deserialized count], 300u, @"");
+    STAssertEquals([deserialized count], numEntries, @"");
     NSString* serialized = [KSJSON serializeObject:deserialized error:&error];
     STAssertNotNil(serialized, @"");
     STAssertNil(error, @"");
@@ -878,7 +861,7 @@
 - (void) testSerializeDeserializeLargeDictionary
 {
     NSError* error = (NSError*)self;
-    unsigned int numEntries = 500;
+    unsigned int numEntries = 2000;
     
     NSMutableString* jsonString = [NSMutableString string];
     [jsonString appendString:@"{"];
