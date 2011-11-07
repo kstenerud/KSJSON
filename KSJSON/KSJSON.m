@@ -813,7 +813,7 @@ static unichar g_true[] = {'t','r','u','e'};
 static unichar g_null[] = {'n','u','l','l'};
 
 // Forward declaration
-static bool serializeObject(KSJSONSerializeContext* context, id object);
+static bool serializeObject(KSJSONSerializeContext* context, CFTypeRef object);
 
 
 /** Initialize a serialization context.
@@ -965,10 +965,9 @@ static void serializeBacktrack(KSJSONSerializeContext* context,
  *
  * @return true if successful.
  */
-static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
+static bool serializeArray(KSJSONSerializeContext* context, CFTypeRef array)
 {
-    CFArrayRef arrayRef = (__bridge CFArrayRef)array;
-    CFIndex count = CFArrayGetCount(arrayRef);
+    CFIndex count = CFArrayGetCount(array);
     
     unlikely_if(count == 0)
     {
@@ -978,7 +977,7 @@ static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
     serializeChar(context, '[');
     for(CFIndex i = 0; i < count; i++)
     {
-        id subObject = (__bridge id) CFArrayGetValueAtIndex(arrayRef, i);
+        CFTypeRef subObject = CFArrayGetValueAtIndex(array, i);
         unlikely_if(!serializeObject(context, subObject))
         {
             return false;
@@ -1000,11 +999,10 @@ static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
  * @return true if successful.
  */
 static bool serializeDictionary(KSJSONSerializeContext* context,
-                                NSDictionary* dict)
+                                CFTypeRef dict)
 {
     bool success = NO;
-    CFDictionaryRef dictRef = (__bridge CFDictionaryRef)dict;
-    CFIndex count = CFDictionaryGetCount(dictRef);
+    CFIndex count = CFDictionaryGetCount(dict);
     
     unlikely_if(count == 0)
     {
@@ -1013,12 +1011,12 @@ static bool serializeDictionary(KSJSONSerializeContext* context,
     }
     serializeChar(context, '{');
 
-    const void** keys;
-    const void** values;
+    CFTypeRef* keys;
+    CFTypeRef* values;
     
     // Try to use the stack, otherwise fall back on the heap.
     void* memory = NULL;
-    const void* stackMemory[kSerialize_DictStackSize * 2];
+    const void* stackMemory[kSerialize_DictStackSize * sizeof(*keys) * 2];
     likely_if(count <= kSerialize_DictStackSize)
     {
         keys = stackMemory;
@@ -1026,7 +1024,7 @@ static bool serializeDictionary(KSJSONSerializeContext* context,
     }
     else
     {
-        memory = malloc(sizeof(void*) * (unsigned int)count * 2);
+        memory = malloc(sizeof(*keys) * (unsigned int)count * 2);
         unlikely_if(memory == NULL)
         {
             makeError(context->error, @"Out of memory");
@@ -1037,17 +1035,15 @@ static bool serializeDictionary(KSJSONSerializeContext* context,
     }
     
     
-    CFDictionaryGetKeysAndValues(dictRef, keys, values);
+    CFDictionaryGetKeysAndValues(dict, keys, values);
     for(CFIndex i = 0; i < count; i++)
     {
-        id key = (__bridge id)keys[i];
-        id value = (__bridge id)values[i];
-        unlikely_if(!serializeObject(context, key))
+        unlikely_if(!serializeObject(context, keys[i]))
         {
             goto done;
         }
         serializeChar(context, ':');
-        unlikely_if(!serializeObject(context, value))
+        unlikely_if(!serializeObject(context, values[i]))
         {
             goto done;
         }
@@ -1073,17 +1069,16 @@ done:
  *
  * @return true if successful.
  */
-static bool serializeString(KSJSONSerializeContext* context, NSString* string)
+static bool serializeString(KSJSONSerializeContext* context, CFTypeRef string)
 {
     void* memory = NULL;
-    CFStringRef stringRef = (__bridge CFStringRef)string;
-    CFIndex length = CFStringGetLength(stringRef);
+    CFIndex length = CFStringGetLength(string);
     unlikely_if(length == 0)
     {
         serialize2Chars(context, '"', '"');
         return true;
     }
-    const unichar* chars = CFStringGetCharactersPtr(stringRef);
+    const unichar* chars = CFStringGetCharactersPtr(string);
     likely_if(chars == NULL)
     {
         likely_if(length <= kSerialize_ScratchBuffSize)
@@ -1100,7 +1095,7 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
             }
             chars = memory;
         }
-        CFStringGetCharacters(stringRef,
+        CFStringGetCharacters(string,
                               CFRangeMake(0, length),
                               (UniChar*)chars);
     }
@@ -1221,17 +1216,16 @@ static void serializeInteger(KSJSONSerializeContext* context,
  * @return true if successful.
  */
 static bool serializeNumber(KSJSONSerializeContext* context,
-                            NSNumber* number)
+                            CFTypeRef number)
 {
-    CFNumberRef numberRef = (__bridge CFNumberRef)number;
-    CFNumberType numberType = CFNumberGetType(numberRef);
+    CFNumberType numberType = CFNumberGetType(number);
     char buff[100];
     switch(numberType)
     {
         case kCFNumberCharType:
         {
             char value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             if(value)
             {
                 serializeChars(context, g_true, 4);
@@ -1245,7 +1239,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
         case kCFNumberFloatType:
         {
             float value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             snprintf(buff, sizeof(buff), "%g", value);
             serializeNumberString(context, buff);
             return true;
@@ -1253,7 +1247,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
         case kCFNumberCGFloatType:
         {
             CGFloat value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             snprintf(buff, sizeof(buff), "%g", value);
             serializeNumberString(context, buff);
             return true;
@@ -1261,7 +1255,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
         case kCFNumberDoubleType:
         {
             double value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             snprintf(buff, sizeof(buff), "%g", value);
             serializeNumberString(context, buff);
             return true;
@@ -1269,7 +1263,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
         case kCFNumberFloat32Type:
         {
             Float32 value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             snprintf(buff, sizeof(buff), "%g", value);
             serializeNumberString(context, buff);
             return true;
@@ -1277,7 +1271,7 @@ static bool serializeNumber(KSJSONSerializeContext* context,
         case kCFNumberFloat64Type:
         {
             Float64 value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             snprintf(buff, sizeof(buff), "%g", value);
             serializeNumberString(context, buff);
             return true;
@@ -1285,70 +1279,70 @@ static bool serializeNumber(KSJSONSerializeContext* context,
         case kCFNumberIntType:
         {
             int value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberNSIntegerType:
         {
             NSInteger value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberLongType:
         {
             long value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberLongLongType:
         {
             long long value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberShortType:
         {
             short value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberSInt16Type:
         {
             SInt16 value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberSInt32Type:
         {
             SInt32 value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberSInt64Type:
         {
             SInt64 value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberSInt8Type:
         {
             SInt8 value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
         case kCFNumberCFIndexType:
         {
             CFIndex value;
-            CFNumberGetValue(numberRef, numberType, &value);
+            CFNumberGetValue(number, numberType, &value);
             serializeInteger(context, value);
             return true;
         }
@@ -1365,14 +1359,14 @@ static bool serializeNumber(KSJSONSerializeContext* context,
  *
  * @return always true.
  */
-static bool serializeNull(KSJSONSerializeContext* context, id object)
+static bool serializeNull(KSJSONSerializeContext* context, CFTypeRef object)
 {
     serializeChars(context, g_null, 4);
     return true;
 }
 
 // Prototype for a serialization routine.
-typedef bool (*serializeFunction)(KSJSONSerializeContext* context, id object);
+typedef bool (*serializeFunction)(KSJSONSerializeContext* context, CFTypeRef object);
 
 /** The different kinds of classes we are interested in. */
 typedef enum
@@ -1402,19 +1396,21 @@ static const serializeFunction g_serializeFunctions[] =
  *
  * @param context The serialization context.
  *
- * @param object The object to serialize.
+ * @param objectRef The object to serialize.
  *
  * @return true if successful.
  */
-static bool serializeObject(KSJSONSerializeContext* context, id object)
+static bool serializeObject(KSJSONSerializeContext* context, CFTypeRef objectRef)
 {
+    id object = (__bridge id) objectRef;
+
     // Check the cache first.
     Class cls = object_getClass(object);
     for(KSJSON_Class i = 0; i < KSJSON_ClassCount; i++)
     {
         unlikely_if(g_classCache[i] == cls)
         {
-            return g_serializeFunctions[i](context, object);
+            return g_serializeFunctions[i](context, objectRef);
         }
     }
     
@@ -1448,7 +1444,7 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     }
     
     g_classCache[classType] = cls;
-    return g_serializeFunctions[classType](context, object);
+    return g_serializeFunctions[classType](context, objectRef);
 }
 
 
@@ -1482,7 +1478,9 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
     context.error = error;
     serializeInit(&context);
     
-    likely_if(serializeObject(&context, object))
+    CFTypeRef objectRef = (__bridge CFTypeRef)object;
+    
+    likely_if(serializeObject(&context, objectRef))
     {
         return serializeFinish(&context);
     }
