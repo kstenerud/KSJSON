@@ -76,11 +76,11 @@ typedef struct
 
 
 
-static id deserializeJSON(KSJSONDeserializeContext* context);
-static id deserializeElement(KSJSONDeserializeContext* context);
-static id deserializeArray(KSJSONDeserializeContext* context);
-static id deserializeDictionary(KSJSONDeserializeContext* context);
-static NSString* deserializeString(KSJSONDeserializeContext* context);
+static CFTypeRef deserializeJSON(KSJSONDeserializeContext* context);
+static CFTypeRef deserializeElement(KSJSONDeserializeContext* context);
+static CFArrayRef deserializeArray(KSJSONDeserializeContext* context);
+static CFDictionaryRef deserializeDictionary(KSJSONDeserializeContext* context);
+static CFStringRef deserializeString(KSJSONDeserializeContext* context);
 
 static unichar g_hexConversion[] =
 {
@@ -132,7 +132,7 @@ static bool parseUnicodeSequence(const unichar* start,
     return true;
 }
 
-static NSString* deserializeString(KSJSONDeserializeContext* context)
+static CFStringRef deserializeString(KSJSONDeserializeContext* context)
 {
     unichar* ch = *context->pos;
     unlikely_if(*ch != '"')
@@ -143,9 +143,9 @@ static NSString* deserializeString(KSJSONDeserializeContext* context)
     unlikely_if(ch[1] == '"')
     {
         *context->pos = ch + 2;
-        return cfautoreleased(CFStringCreateWithCString(NULL,
-                                                        "",
-                                                        kCFStringEncodingUTF8));
+        return CFStringCreateWithCString(NULL,
+                                         "",
+                                         kCFStringEncodingUTF8);
     }
     ch++;
     unichar* start = ch;
@@ -208,9 +208,9 @@ static NSString* deserializeString(KSJSONDeserializeContext* context)
     }
     
     *context->pos = ch + 1;
-    return cfautoreleased(CFStringCreateWithCharacters(NULL,
-                                                       start,
-                                                       (CFIndex)(pStr - start)));
+    return CFStringCreateWithCharacters(NULL,
+                                        start,
+                                        (CFIndex)(pStr - start));
 }
 
 
@@ -228,7 +228,7 @@ static bool isFPChar(unichar ch)
     }
 }
 
-static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
+static CFNumberRef deserializeNumber(KSJSONDeserializeContext* context)
 {
     unichar* start = *context->pos;
     unichar* ch = start;
@@ -253,7 +253,7 @@ static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
     {
         accum *= sign;
         *context->pos = ch;
-        return cfautoreleased(CFNumberCreate(NULL, kCFNumberLongLongType, &accum));
+        return CFNumberCreate(NULL, kCFNumberLongLongType, &accum);
     }
     
     for(;ch < context->end && isFPChar(*ch); ch++)
@@ -263,10 +263,10 @@ static NSNumber* deserializeNumber(KSJSONDeserializeContext* context)
     *context->pos = ch;
     
     NSString* string = cfautoreleased(CFStringCreateWithCharacters(NULL, start, ch - start));
-    return [NSDecimalNumber decimalNumberWithString:string];
+    return (__bridge_retained CFNumberRef)[[NSDecimalNumber alloc] initWithString:string];
 }
 
-static NSNumber* deserializeFalse(KSJSONDeserializeContext* context)
+static CFNumberRef deserializeFalse(KSJSONDeserializeContext* context)
 {
     const unichar* ch = *context->pos;
     unlikely_if(context->end - ch < 5)
@@ -281,10 +281,10 @@ static NSNumber* deserializeFalse(KSJSONDeserializeContext* context)
     }
     *context->pos += 5;
     char no = 0;
-    return cfautoreleased(CFNumberCreate(NULL, kCFNumberCharType, &no));
+    return CFNumberCreate(NULL, kCFNumberCharType, &no);
 }
 
-static NSNumber* deserializeTrue(KSJSONDeserializeContext* context)
+static CFNumberRef deserializeTrue(KSJSONDeserializeContext* context)
 {
     const unichar* ch = *context->pos;
     unlikely_if(context->end - ch < 4)
@@ -299,10 +299,10 @@ static NSNumber* deserializeTrue(KSJSONDeserializeContext* context)
     }
     *context->pos += 4;
     char yes = 1;
-    return cfautoreleased(CFNumberCreate(NULL, kCFNumberCharType, &yes));
+    return CFNumberCreate(NULL, kCFNumberCharType, &yes);
 }
 
-static NSNull* deserializeNull(KSJSONDeserializeContext* context)
+static CFNullRef deserializeNull(KSJSONDeserializeContext* context)
 {
     const unichar* ch = *context->pos;
     unlikely_if(context->end - ch < 4)
@@ -316,10 +316,10 @@ static NSNull* deserializeNull(KSJSONDeserializeContext* context)
         return nil;
     }
     *context->pos += 4;
-    return (__bridge id)kCFNull;
+    return kCFNull;
 }
 
-static id deserializeElement(KSJSONDeserializeContext* context)
+static CFTypeRef deserializeElement(KSJSONDeserializeContext* context)
 {
     skipWhitespace(*context->pos, context->end);
     
@@ -363,7 +363,7 @@ static void arrayInit(Array* array)
     array->values = array->valuesOnStack;
 }
 
-static bool arrayAddValue(Array* array, id value, NSError** error)
+static bool arrayAddValue(Array* array, CFTypeRef value, NSError** error)
 {
     unlikely_if(array->index >= array->length)
     {
@@ -398,20 +398,24 @@ static bool arrayAddValue(Array* array, id value, NSError** error)
             array->values = newValues;
         }
     }
-    array->values[array->index] = (__bridge CFTypeRef)value;
+    array->values[array->index] = value;
     array->index++;
     return true;
 }
 
 static void arrayFree(Array* array)
 {
+    for(unsigned int i = 0; i < array->index; i++)
+    {
+        CFRelease(array->values[i]);
+    }
     if(!array->onStack)
     {
         free(array->values);
     }
 }
 
-static id deserializeArray(KSJSONDeserializeContext* context)
+static CFArrayRef deserializeArray(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
     Array array;
@@ -423,14 +427,14 @@ static id deserializeArray(KSJSONDeserializeContext* context)
         unlikely_if(**context->pos == ARRAY_END)
         {
             (*context->pos)++;
-            id result = cfautoreleased(CFArrayCreate(NULL,
-                                                     (const void**)array.values,
-                                                     (CFIndex)array.index,
-                                                     &kCFTypeArrayCallBacks));
+            CFTypeRef result = CFArrayCreate(NULL,
+                                             (const void**)array.values,
+                                             (CFIndex)array.index,
+                                             &kCFTypeArrayCallBacks);
             arrayFree(&array);
             return result;
         }
-        id element = deserializeElement(context);
+        CFTypeRef element = deserializeElement(context);
         unlikely_if(element == nil)
         {
             goto failed;
@@ -469,7 +473,7 @@ static void dictInit(Dictionary* dict)
     dict->values = dict->valuesOnStack;
 }
 
-static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** error)
+static bool dictAddKeyAndValue(Dictionary* dict, CFStringRef key, CFTypeRef value, NSError** error)
 {
     unlikely_if(dict->index >= dict->length)
     {
@@ -510,14 +514,20 @@ static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** err
             dict->values = newValues;
         }
     }
-    dict->keys[dict->index] = (__bridge void*)key;
-    dict->values[dict->index] = (__bridge void*)value;
+    dict->keys[dict->index] = key;
+    dict->values[dict->index] = value;
     dict->index++;
     return true;
 }
 
 static void dictFree(Dictionary* dict)
 {
+    for(unsigned int i = 0; i < dict->index; i++)
+    {
+        CFRelease(dict->keys[i]);
+        CFRelease(dict->values[i]);
+    }
+
     if(!dict->onStack)
     {
         free(dict->keys);
@@ -525,7 +535,7 @@ static void dictFree(Dictionary* dict)
     }
 }
 
-static id deserializeDictionary(KSJSONDeserializeContext* context)
+static CFDictionaryRef deserializeDictionary(KSJSONDeserializeContext* context)
 {
     (*context->pos)++;
     Dictionary dict;
@@ -537,16 +547,16 @@ static id deserializeDictionary(KSJSONDeserializeContext* context)
         unlikely_if(**context->pos == DICTIONARY_END)
         {
             (*context->pos)++;
-            id result = cfautoreleased(CFDictionaryCreate(NULL,
-                                                          (const void**)dict.keys,
-                                                          (const void**)dict.values,
-                                                          (CFIndex)dict.index,
-                                                          &kCFTypeDictionaryKeyCallBacks,
-                                                          &kCFTypeDictionaryValueCallBacks));
+            CFTypeRef result = CFDictionaryCreate(NULL,
+                                                  (const void**)dict.keys,
+                                                  (const void**)dict.values,
+                                                  (CFIndex)dict.index,
+                                                  &kCFTypeDictionaryKeyCallBacks,
+                                                  &kCFTypeDictionaryValueCallBacks);
             dictFree(&dict);
             return result;
         }
-        NSString* name = deserializeString(context);
+        CFStringRef name = deserializeString(context);
         unlikely_if(name == nil)
         {
             goto failed;
@@ -558,7 +568,7 @@ static id deserializeDictionary(KSJSONDeserializeContext* context)
             goto failed;
         }
         (*context->pos)++;
-        id element = deserializeElement(context);
+        CFTypeRef element = deserializeElement(context);
         unlikely_if(element == nil)
         {
             goto failed;
@@ -582,7 +592,7 @@ failed:
 }
 
 
-static id deserializeJSON(KSJSONDeserializeContext* context)
+static CFTypeRef deserializeJSON(KSJSONDeserializeContext* context)
 {
     skipWhitespace(*context->pos, context->end);
     switch(**context->pos)
@@ -1181,7 +1191,7 @@ static bool serializeObject(KSJSONSerializeContext* context, id object)
         error
     };
     
-    id result = deserializeJSON(&context);
+    id result = cfautoreleased(deserializeJSON(&context));
     unlikely_if(error != nil && *error != nil)
     {
         NSString* desc = [(*error).userInfo valueForKey:NSLocalizedDescriptionKey];
