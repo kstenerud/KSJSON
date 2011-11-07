@@ -377,25 +377,16 @@ static bool arrayAddValue(Array* array, CFTypeRef value, NSError** error)
                 return false;
             }
             array->onStack = false;
-            for(unsigned int i = 0; i < array->index; i++)
-            {
-                array->values[i] = array->valuesOnStack[i];
-            }
+            memcpy(array->values, array->valuesOnStack, array->index * sizeof(*array->values));
         }
         else
         {
-            CFTypeRef* newValues = malloc(array->length * sizeof(*newValues));
-            unlikely_if(newValues == NULL)
+            array->values = realloc(array->values, array->index * sizeof(*array->values));
+            unlikely_if(array->values == NULL)
             {
                 makeError(error, @"Out of memory");
                 return false;
             }
-            for(unsigned int i = 0; i < array->index; i++)
-            {
-                newValues[i] = array->values[i];
-            }
-            free(array->values);
-            array->values = newValues;
         }
     }
     array->values[array->index] = value;
@@ -488,30 +479,18 @@ static bool dictAddKeyAndValue(Dictionary* dict, CFStringRef key, CFTypeRef valu
                 return false;
             }
             dict->onStack = false;
-            for(unsigned int i = 0; i < dict->index; i++)
-            {
-                dict->keys[i] = dict->keysOnStack[i];
-                dict->values[i] = dict->valuesOnStack[i];
-            }
+            memcpy(dict->keys, dict->keysOnStack, dict->length * sizeof(*dict->keys));
+            memcpy(dict->values, dict->valuesOnStack, dict->length * sizeof(*dict->values));
         }
         else
         {
-            CFTypeRef* newKeys = malloc(dict->length * sizeof(*newKeys));
-            CFTypeRef* newValues = malloc(dict->length * sizeof(*newValues));
-            unlikely_if(newKeys == NULL || newValues == NULL)
+            dict->keys = realloc(dict->keys, dict->length * sizeof(*dict->keys));
+            dict->values = realloc(dict->values, dict->length * sizeof(*dict->values));
+            unlikely_if(dict->keys == NULL || dict->values == NULL)
             {
                 makeError(error, @"Out of memory");
                 return false;
             }
-            for(unsigned int i = 0; i < dict->index; i++)
-            {
-                newKeys[i] = dict->keys[i];
-                newValues[i] = dict->values[i];
-            }
-            free(dict->keys);
-            free(dict->values);
-            dict->keys = newKeys;
-            dict->values = newValues;
         }
     }
     dict->keys[dict->index] = key;
