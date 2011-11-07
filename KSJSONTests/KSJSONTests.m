@@ -846,6 +846,61 @@
     STAssertEqualObjects(result, original, @"");
 }
 
+- (void) testSerializeDeserializeLargeArray
+{
+    NSError* error = (NSError*)self;
+    NSString* jsonString = @"["
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9,"
+    "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9," "0,1,2,3,4,5,6,7,8,9"
+    "]";
+    id deserialized = [KSJSON deserializeString:jsonString error:&error];
+    STAssertNotNil(deserialized, @"");
+    STAssertNil(error, @"");
+    STAssertEquals([deserialized count], 300u, @"");
+    NSString* serialized = [KSJSON serializeObject:deserialized error:&error];
+    STAssertNotNil(serialized, @"");
+    STAssertNil(error, @"");
+    STAssertEqualObjects(serialized, jsonString, @"");
+    int value = [[deserialized objectAtIndex:1] intValue];
+    STAssertEquals(value, 1, @"");
+    value = [[deserialized objectAtIndex:9] intValue];
+    STAssertEquals(value, 9, @"");
+}
+
+- (void) testSerializeDeserializeLargeDictionary
+{
+    NSError* error = (NSError*)self;
+    unsigned int numEntries = 500;
+    
+    NSMutableString* jsonString = [NSMutableString string];
+    [jsonString appendString:@"{"];
+    for(unsigned int i = 0; i < numEntries; i++)
+    {
+        [jsonString appendFormat:@"\"%d\":%d,", i, i];
+    }
+    [jsonString deleteCharactersInRange:NSMakeRange([jsonString length]-1, 1)];
+    [jsonString appendString:@"}"];
+    
+    id deserialized = [KSJSON deserializeString:jsonString error:&error];
+    STAssertNotNil(deserialized, @"");
+    STAssertNil(error, @"");
+    STAssertEquals([deserialized count], numEntries, @"");
+    int value = [[deserialized objectForKey:@"1"] intValue];
+    STAssertEquals(value, 1, @"");
+    NSString* serialized = [KSJSON serializeObject:deserialized error:&error];
+    STAssertNotNil(serialized, @"");
+    STAssertNil(error, @"");
+    STAssertTrue([serialized length] == [jsonString length], @"");
+}
+
 - (void) testDeserializeArrayMissingTerminator
 {
     NSError* error = (NSError*)self;
@@ -922,6 +977,15 @@
 {
     NSError* error = (NSError*)self;
     NSString* jsonString = @"[\"One\\\"]";
+    id result = [KSJSON deserializeString:jsonString error:&error];
+    STAssertNil(result, @"");
+    STAssertNotNil(error, @"");
+}
+
+- (void)testDeserializeArrayUnterminatedEscape3
+{
+    NSError* error = (NSError*)self;
+    NSString* jsonString = @"[\"One\\u\"]";
     id result = [KSJSON deserializeString:jsonString error:&error];
     STAssertNil(result, @"");
     STAssertNotNil(error, @"");
@@ -1061,6 +1125,5 @@
     STAssertNil(result, @"");
     STAssertNotNil(error, @"");
 }
-
 
 @end

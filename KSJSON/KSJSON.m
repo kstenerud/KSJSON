@@ -28,7 +28,14 @@
 
 #import <objc/runtime.h>
 
-#define skipWhitespace(CH,END) for(;(CH) < (END) && isspace(*(CH));(CH)++) {}
+
+#define kDeserialize_DictionaryInitialSize 256
+#define kDeserialize_ArrayInitialSize 256
+
+#define kSerialize_DictStackSize 128
+#define kSerialize_ScratchBuffSize 1024
+#define kSerialize_InitialBuffSize 65536
+
 
 #define ESCAPE_BEGIN '\\'
 #define STRING_BEGIN '"'
@@ -45,6 +52,7 @@
 #define DICTIONARY_BEGIN '{'
 #define DICTIONARY_END '}'
 
+
 #define likely_if(x) if(__builtin_expect(x,1))
 #define unlikely_if(x) if(__builtin_expect(x,0))
 
@@ -55,6 +63,8 @@
     #define autoreleased(X) [(X) autorelease]
     #define cfautoreleased(X) [((__bridge_transfer id)(X)) autorelease]
 #endif
+
+#define skipWhitespace(CH,END) for(;(CH) < (END) && isspace(*(CH));(CH)++) {}
 
 
 typedef struct
@@ -338,8 +348,8 @@ static id deserializeElement(KSJSONDeserializeContext* context)
 
 typedef struct
 {
-    void* valuesOnStack[128];
-    void** values;
+    CFTypeRef valuesOnStack[kDeserialize_ArrayInitialSize];
+    CFTypeRef* values;
     unsigned int length;
     unsigned int index;
     bool onStack;
@@ -361,25 +371,34 @@ static bool arrayAddValue(Array* array, id value, NSError** error)
         if(array->onStack)
         {
             array->values = malloc(array->length * sizeof(*array->values));
-            array->onStack = false;
             unlikely_if(array->values == NULL)
             {
                 makeError(error, @"Out of memory");
                 return false;
             }
-            memcpy(array->values, array->valuesOnStack, array->index);
+            array->onStack = false;
+            for(unsigned int i = 0; i < array->index; i++)
+            {
+                array->values[i] = array->valuesOnStack[i];
+            }
         }
         else
         {
-            array->values = realloc(array->values, array->length * sizeof(*array->values));
-            unlikely_if(array->values == NULL)
+            CFTypeRef* newValues = malloc(array->length * sizeof(*newValues));
+            unlikely_if(newValues == NULL)
             {
                 makeError(error, @"Out of memory");
                 return false;
             }
+            for(unsigned int i = 0; i < array->index; i++)
+            {
+                newValues[i] = array->values[i];
+            }
+            free(array->values);
+            array->values = newValues;
         }
     }
-    array->values[array->index] = (__bridge void*)value;
+    array->values[array->index] = (__bridge CFTypeRef)value;
     array->index++;
     return true;
 }
@@ -432,10 +451,10 @@ failed:
 
 typedef struct
 {
-    void* keysOnStack[128];
-    void* valuesOnStack[128];
-    void** keys;
-    void** values;
+    CFTypeRef keysOnStack[kDeserialize_DictionaryInitialSize];
+    CFTypeRef valuesOnStack[kDeserialize_DictionaryInitialSize];
+    CFTypeRef* keys;
+    CFTypeRef* values;
     unsigned int length;
     unsigned int index;
     bool onStack;
@@ -459,24 +478,36 @@ static bool dictAddKeyAndValue(Dictionary* dict, id key, id value, NSError** err
         {
             dict->keys = malloc(dict->length * sizeof(*dict->keys));
             dict->values = malloc(dict->length * sizeof(*dict->values));
-            dict->onStack = false;
             unlikely_if(dict->keys == NULL || dict->values == NULL)
             {
                 makeError(error, @"Out of memory");
                 return false;
             }
-            memcpy(dict->keys, dict->keysOnStack, dict->index);
-            memcpy(dict->values, dict->valuesOnStack, dict->index);
+            dict->onStack = false;
+            for(unsigned int i = 0; i < dict->index; i++)
+            {
+                dict->keys[i] = dict->keysOnStack[i];
+                dict->values[i] = dict->valuesOnStack[i];
+            }
         }
         else
         {
-            dict->keys = realloc(dict->keys, dict->length * sizeof(*dict->keys));
-            dict->values = realloc(dict->values, dict->length * sizeof(*dict->values));
-            unlikely_if(dict->keys == NULL || dict->values == NULL)
+            CFTypeRef* newKeys = malloc(dict->length * sizeof(*newKeys));
+            CFTypeRef* newValues = malloc(dict->length * sizeof(*newValues));
+            unlikely_if(newKeys == NULL || newValues == NULL)
             {
                 makeError(error, @"Out of memory");
                 return false;
             }
+            for(unsigned int i = 0; i < dict->index; i++)
+            {
+                newKeys[i] = dict->keys[i];
+                newValues[i] = dict->values[i];
+            }
+            free(dict->keys);
+            free(dict->values);
+            dict->keys = newKeys;
+            dict->values = newValues;
         }
     }
     dict->keys[dict->index] = (__bridge void*)key;
@@ -570,13 +601,11 @@ static id deserializeJSON(KSJSONDeserializeContext* context)
 
 
 
-#define KSJSON_ScratchBuffSize 1024
-#define KSJSON_InitialBuffSize 65536
 
 typedef struct
 {
     unichar* buffer;
-    unichar scratchBuffer[KSJSON_ScratchBuffSize];
+    unichar scratchBuffer[kSerialize_ScratchBuffSize];
     unsigned int size;
     unsigned int index;
     __autoreleasing NSError** error;
@@ -593,7 +622,7 @@ static bool serializeObject(KSJSONSerializeContext* context, id object);
 static bool serializeInit(KSJSONSerializeContext* context)
 {
     context->index = 0;
-    context->size = KSJSON_InitialBuffSize;
+    context->size = kSerialize_InitialBuffSize;
     context->buffer = CFAllocatorAllocate(NULL,
                                           (CFIndex)(sizeof(context->buffer[0]) * context->size),
                                           0);
@@ -701,7 +730,6 @@ static bool serializeArray(KSJSONSerializeContext* context, NSArray* array)
     return true;
 }
 
-#define kDictStackSize 50
 
 static bool serializeDictionary(KSJSONSerializeContext* context,
                                 NSDictionary* dict)
@@ -719,8 +747,8 @@ static bool serializeDictionary(KSJSONSerializeContext* context,
     const void** keys;
     const void** values;
     void* memory = NULL;
-    const void* stackMemory[kDictStackSize * 2];
-    likely_if(count <= kDictStackSize)
+    const void* stackMemory[kSerialize_DictStackSize * 2];
+    likely_if(count <= kSerialize_DictStackSize)
     {
         keys = stackMemory;
         values = keys + count;
@@ -779,7 +807,7 @@ static bool serializeString(KSJSONSerializeContext* context, NSString* string)
     const unichar* chars = CFStringGetCharactersPtr(stringRef);
     likely_if(chars == NULL)
     {
-        likely_if(length <= KSJSON_ScratchBuffSize)
+        likely_if(length <= kSerialize_ScratchBuffSize)
         {
             chars = context->scratchBuffer;
         }
@@ -1026,7 +1054,8 @@ static bool serializeNumber(KSJSONSerializeContext* context,
             return true;
         }
     }
-    return serializeString(context, [number stringValue]);
+    makeError(context->error, @"%@: Cannot serialize numeric value", number);
+    return nil;
 }
 
 static bool serializeNull(KSJSONSerializeContext* context, id object)
