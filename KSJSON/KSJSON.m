@@ -1051,8 +1051,8 @@ static bool serializeDictionary(KSJSONSerializeContext* context,
     }
     serializeBacktrack(context, 1);
     serializeChar(context, '}');
-    
     success = YES;
+
 done:
     unlikely_if(memory != NULL)
     {
@@ -1071,6 +1071,7 @@ done:
  */
 static bool serializeString(KSJSONSerializeContext* context, CFTypeRef string)
 {
+    bool success = NO;
     void* memory = NULL;
     CFIndex length = CFStringGetLength(string);
     unlikely_if(length == 0)
@@ -1141,7 +1142,7 @@ static bool serializeString(KSJSONSerializeContext* context, CFTypeRef string)
                     break;
                 default:
                     makeError(context->error, @"Invalid character: 0x%02x", *nextEscape);
-                    return false;
+                    goto done;
             }
         }
     }
@@ -1151,12 +1152,14 @@ static bool serializeString(KSJSONSerializeContext* context, CFTypeRef string)
     }
     
     serializeChar(context, '"');
+    success = YES;
     
+done:
     unlikely_if(memory != NULL)
     {
         free(memory);
     }
-    return true;
+    return success;
 }
 
 /** Serialize a number represented as a string of digits.
