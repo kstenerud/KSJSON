@@ -41,7 +41,7 @@
  *
  * @return The JSON serialized string or nil if an error occurred.
  */
-+ (NSString*) serializeObject:(id) object error:(NSError**) error;
++ (NSData*) serializeObject:(id) object error:(NSError**) error;
 
 /** Deserialize a JSON string into an object hierarchy.
  * Returns nil on error and prints out diagnostic messages.
@@ -52,6 +52,6 @@
  *
  * @return the resulting object hierarchy or nil if an error occurred.
  */
-+ (id) deserializeString:(NSString*) jsonString error:(NSError**) error;
++ (id) deserializeData:(NSData*) jsonData error:(NSError**) error;
 
 @end
