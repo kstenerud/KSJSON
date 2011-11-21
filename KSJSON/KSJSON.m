@@ -110,7 +110,7 @@ unlikely_if(*context->error != nil) \
  *
  * @param fmt The message to fill the error object with.
  */
-static void makeError(NSError** error, NSString* fmt, ...)
+static void makeError(NSError** restrict error, NSString* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -136,13 +136,13 @@ typedef struct
     /** Allocated memory */
     unsigned char* bytes;
     /** The first unused byte in the buffer. */
-    unsigned char* pos;
+    unsigned char* restrict pos;
 } KSJSONResizableBuffer;
 
 
-static void resizableBufferAlloc(KSJSONResizableBuffer* buffer,
+static void resizableBufferAlloc(KSJSONResizableBuffer* restrict buffer,
                                  size_t size,
-                                 NSError** error)
+                                 NSError** restrict error)
 {
     buffer->size = size;
     buffer->reserved = 0;
@@ -157,9 +157,9 @@ static void resizableBufferAlloc(KSJSONResizableBuffer* buffer,
     }
 }
 
-static void resizableBufferSetReservedSize(KSJSONResizableBuffer* buffer,
+static void resizableBufferSetReservedSize(KSJSONResizableBuffer* restrict buffer,
                                            size_t size,
-                                           NSError** error)
+                                           NSError** restrict error)
 {
     buffer->reserved = size;
     unlikely_if(buffer->reserved > buffer->size)
@@ -182,14 +182,14 @@ static void resizableBufferSetReservedSize(KSJSONResizableBuffer* buffer,
     }
 }
 
-static inline void resizableBufferReserve(KSJSONResizableBuffer* buffer,
+static inline void resizableBufferReserve(KSJSONResizableBuffer* restrict buffer,
                                           size_t size,
-                                          NSError** error)
+                                          NSError** restrict error)
 {
     resizableBufferSetReservedSize(buffer, buffer->reserved + size, error);
 }
 
-static void resizableBufferResizeOptimal(KSJSONResizableBuffer* buffer)
+static void resizableBufferResizeOptimal(KSJSONResizableBuffer* restrict buffer)
 {
     if(buffer->bytes + buffer->size > buffer->pos)
     {
@@ -202,7 +202,7 @@ static void resizableBufferResizeOptimal(KSJSONResizableBuffer* buffer)
     }
 }
 
-static void resizableBufferDeallocate(KSJSONResizableBuffer* buffer)
+static void resizableBufferDeallocate(KSJSONResizableBuffer* restrict buffer)
 {
     CFAllocatorDeallocate(NULL, buffer->bytes);
 }
@@ -220,17 +220,17 @@ typedef struct
     /** The beginning of the JSON string. */
     const unsigned char* start;
     /** Current position in the JSON string. */
-    const unsigned char* pos;
+    const unsigned char* restrict pos;
     /** End of the JSON string. */
     const unsigned char* end;
     /** Any error that has occurred. */
-    __autoreleasing NSError** error;
+    __autoreleasing NSError** restrict error;
     KSJSONResizableBuffer scratch;
 } KSJSONDeserializeContext;
 
 
 // Forward reference.
-static CFTypeRef deserializeElement(KSJSONDeserializeContext* context);
+static CFTypeRef deserializeElement(KSJSONDeserializeContext* restrict context);
 
 static bool g_escapeValues[256] = {false};
 
@@ -269,25 +269,45 @@ static unsigned int g_hexConversionEnd = sizeof(g_hexConversion) / sizeof(*g_hex
  * @return true if parsing was successful. If false, error will contain an
  *         explanation.
  */
-static unsigned int parseUnicodeSequence(KSJSONDeserializeContext* context,
-                                         const unsigned char* start,
-                                         unsigned char* destination)
+static unsigned int parseUnicodeSequence(KSJSONDeserializeContext* restrict context,
+                                         const unsigned char* restrict src,
+                                         unsigned char* restrict dst)
 {
     unsigned int accum = 0;
-    const unsigned char* end = start + 4;
-    unsigned char* dst = destination;
-    for(const unsigned char* ch = start; ch < end; ch++)
+    unsigned int next;
+
+    next = (unsigned int)(*src++ - '0');
+    unlikely_if(next >= g_hexConversionEnd || g_hexConversion[next] == 0x77)
     {
-        unsigned int next = (unsigned int)(*ch - '0');
-        unlikely_if(next < 0 ||
-                    next >= g_hexConversionEnd ||
-                    g_hexConversion[next] == 0x77)
-        {
-            makeError(context->error, @"Invalid unicode sequence");
-            return 0;
-        }
-        accum = (accum << 4) + g_hexConversion[next];
+        makeError(context->error, @"Invalid unicode sequence");
+        return 0;
     }
+    accum = (accum << 4) + g_hexConversion[next];
+    
+    next = (unsigned int)(*src++ - '0');
+    unlikely_if(next >= g_hexConversionEnd || g_hexConversion[next] == 0x77)
+    {
+        makeError(context->error, @"Invalid unicode sequence");
+        return 0;
+    }
+    accum = (accum << 4) + g_hexConversion[next];
+    
+    next = (unsigned int)(*src++ - '0');
+    unlikely_if(next >= g_hexConversionEnd || g_hexConversion[next] == 0x77)
+    {
+        makeError(context->error, @"Invalid unicode sequence");
+        return 0;
+    }
+    accum = (accum << 4) + g_hexConversion[next];
+    
+    next = (unsigned int)(*src++ - '0');
+    unlikely_if(next >= g_hexConversionEnd || g_hexConversion[next] == 0x77)
+    {
+        makeError(context->error, @"Invalid unicode sequence");
+        return 0;
+    }
+    accum = (accum << 4) + g_hexConversion[next];
+
     if(accum <= 0x7f)
     {
         *dst = (unsigned char)accum;
@@ -305,13 +325,29 @@ static unsigned int parseUnicodeSequence(KSJSONDeserializeContext* context,
     return 3;
 }
 
+static void deserializeInit(KSJSONDeserializeContext* restrict context, NSData* jsonData)
+{
+    unlikely_if(jsonData == nil)
+    {
+        makeError(context->error, @"data is nil");
+        return;
+    }
+    
+    CFDataRef dataRef = (__bridge CFDataRef) jsonData;
+    const unsigned char* start = (const unsigned char*)CFDataGetBytePtr(dataRef);    
+    context->pos = start;
+    context->end = start + CFDataGetLength(dataRef);
+    
+    resizableBufferAlloc(&context->scratch, kScratchBuffSize, context->error);
+}
+
 /** Deserialize a string.
  *
  * @param context The deserialization context.
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFStringRef deserializeString(KSJSONDeserializeContext* context)
+static CFStringRef deserializeString(KSJSONDeserializeContext* restrict context)
 {
     unlikely_if(*context->pos != '"')
     {
@@ -435,22 +471,21 @@ static bool isFPChar(unsigned char ch)
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFNumberRef deserializeNumber(KSJSONDeserializeContext* context)
+static CFNumberRef deserializeNumber(KSJSONDeserializeContext* restrict context)
 {
     const unsigned char* start = context->pos;
-    const unsigned char* ch = start;
     
     // First, try to do a simple integer conversion.
     long long accum = 0;
-    long long sign = *ch == '-' ? -1 : 1;
+    long long sign = *context->pos == '-' ? -1 : 1;
     if(sign == -1)
     {
-        ch++;
+        context->pos++;
     }
     
-    for(;ch < context->end && isdigit(*ch); ch++)
+    for(;context->pos < context->end && isdigit(*context->pos); context->pos++)
     {
-        accum = accum * 10 + (*ch - '0');
+        accum = accum * 10 + (*context->pos - '0');
         unlikely_if(accum < 0)
         {
             // Overflow
@@ -458,28 +493,16 @@ static CFNumberRef deserializeNumber(KSJSONDeserializeContext* context)
         }
     }
     
-    if(!isFPChar(*ch))
+    if(!isFPChar(*context->pos))
     {
         accum *= sign;
-        context->pos = ch;
         return CFNumberCreate(NULL, kCFNumberLongLongType, &accum);
     }
-    
-    double result = strtod((const char*)start, (char**)&context->pos);
+
+    const unsigned char* end;
+    double result = strtod((const char*)start, (char**)&end);
+    context->pos = end;
     return CFNumberCreate(NULL, kCFNumberDoubleType, &result);
-    
-    // It's not a simple integer, so let NSDecimalNumber convert it.
-    for(;ch < context->end && isFPChar(*ch); ch++)
-    {
-    }
-    
-    context->pos = ch;
-    NSString* string = cfautoreleased(CFStringCreateWithBytes(NULL,
-                                                              start,
-                                                              ch - start,
-                                                              kCFStringEncodingUTF8,
-                                                              NO));
-    return (__bridge_retained CFNumberRef)[[NSDecimalNumber alloc] initWithString:string];
 }
 
 
@@ -491,15 +514,17 @@ static CFNumberRef deserializeNumber(KSJSONDeserializeContext* context)
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFNumberRef deserializeFalse(KSJSONDeserializeContext* context)
+static CFNumberRef deserializeFalse(KSJSONDeserializeContext* restrict context)
 {
-    const unsigned char* ch = context->pos;
-    unlikely_if(context->end - ch < 5)
+    unlikely_if(context->end - context->pos < 5)
     {
         makeError(context->error, @"Premature end of JSON data");
         return nil;
     }
-    unlikely_if(!(ch[1] == 'a' && ch[2] == 'l' && ch[3] == 's' && ch[4] == 'e'))
+    unlikely_if(!(context->pos[1] == 'a' &&
+                  context->pos[2] == 'l' &&
+                  context->pos[3] == 's' &&
+                  context->pos[4] == 'e'))
     {
         makeError(context->error, @"Invalid characters while parsing 'false'");
         return nil;
@@ -508,22 +533,23 @@ static CFNumberRef deserializeFalse(KSJSONDeserializeContext* context)
     char no = 0;
     return CFNumberCreate(NULL, kCFNumberCharType, &no);
 }
+
 /** Deserialize "true".
  *
  * @param context The deserialization context.
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-
-static CFNumberRef deserializeTrue(KSJSONDeserializeContext* context)
+static CFNumberRef deserializeTrue(KSJSONDeserializeContext* restrict context)
 {
-    const unsigned char* ch = context->pos;
-    unlikely_if(context->end - ch < 4)
+    unlikely_if(context->end - context->pos < 4)
     {
         makeError(context->error, @"Premature end of JSON data");
         return nil;
     }
-    unlikely_if(!(ch[1] == 'r' && ch[2] == 'u' && ch[3] == 'e'))
+    unlikely_if(!(context->pos[1] == 'r' &&
+                  context->pos[2] == 'u' &&
+                  context->pos[3] == 'e'))
     {
         makeError(context->error, @"Invalid characters while parsing 'true'");
         return nil;
@@ -539,15 +565,16 @@ static CFNumberRef deserializeTrue(KSJSONDeserializeContext* context)
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFNullRef deserializeNull(KSJSONDeserializeContext* context)
+static CFNullRef deserializeNull(KSJSONDeserializeContext* restrict context)
 {
-    const unsigned char* ch = context->pos;
-    unlikely_if(context->end - ch < 4)
+    unlikely_if(context->end - context->pos < 4)
     {
         makeError(context->error, @"Premature end of JSON data");
         return nil;
     }
-    unlikely_if(!(ch[1] == 'u' && ch[2] == 'l' && ch[3] == 'l'))
+    unlikely_if(!(context->pos[1] == 'u' &&
+                  context->pos[2] == 'l' &&
+                  context->pos[3] == 'l'))
     {
         makeError(context->error, @"Invalid characters while parsing 'null'");
         return nil;
@@ -565,7 +592,7 @@ typedef struct
     /** Stack storage when the array is small enough. */
     CFTypeRef valuesOnStack[kDeserialize_ArrayInitialSize];
     /** Heap storage when the array is bigger. */
-    CFTypeRef* values;
+    CFTypeRef* restrict values;
     /** Length of the array buffer. */
     unsigned int length;
     /** Index of the end of the array. */
@@ -579,7 +606,7 @@ typedef struct
  *
  * @param array The array.
  */
-static void arrayInit(Array* array)
+static void arrayInit(Array* restrict array)
 {
     array->onStack = true;
     array->index = 0;
@@ -597,8 +624,8 @@ static void arrayInit(Array* array)
  *
  * @return true if the object was successfully added.
  */
-static void arrayAddValue(KSJSONDeserializeContext* context,
-                          Array* array,
+static void arrayAddValue(KSJSONDeserializeContext* restrict context,
+                          Array* restrict array,
                           CFTypeRef value)
 {
     unlikely_if(array->index >= array->length)
@@ -635,7 +662,7 @@ static void arrayAddValue(KSJSONDeserializeContext* context,
  *
  * @param array The array to free.
  */
-static void arrayFree(Array* array)
+static void arrayFree(Array* restrict array)
 {
     for(unsigned int i = 0; i < array->index; i++)
     {
@@ -653,7 +680,7 @@ static void arrayFree(Array* array)
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFArrayRef deserializeArray(KSJSONDeserializeContext* context)
+static CFArrayRef deserializeArray(KSJSONDeserializeContext* restrict context)
 {
     CFTypeRef result = NULL;
     context->pos++;
@@ -704,9 +731,9 @@ typedef struct
     /** Stack storage for values when dictionary is small enough. */
     CFTypeRef valuesOnStack[kDeserialize_DictionaryInitialSize];
     /** Heap storage for keys when the array is bigger. */
-    CFTypeRef* keys;
+    CFTypeRef* restrict keys;
     /** Heap storage for values when the array is bigger. */
-    CFTypeRef* values;
+    CFTypeRef* restrict values;
     /** Length of the dictionary buffer. */
     unsigned int length;
     /** Index of the end of the dictionary. */
@@ -720,7 +747,7 @@ typedef struct
  *
  * @param dict The dictionary to initialize.
  */
-static void dictInit(Dictionary* dict)
+static void dictInit(Dictionary* restrict dict)
 {
     dict->onStack = true;
     dict->index = 0;
@@ -741,8 +768,8 @@ static void dictInit(Dictionary* dict)
  *
  * @return true if the pair was successfully added.
  */
-static void dictAddKeyAndValue(KSJSONDeserializeContext* context,
-                               Dictionary* dict,
+static void dictAddKeyAndValue(KSJSONDeserializeContext* restrict context,
+                               Dictionary* restrict dict,
                                CFStringRef key,
                                CFTypeRef value)
 {
@@ -791,7 +818,7 @@ static void dictAddKeyAndValue(KSJSONDeserializeContext* context,
  *
  * @param dict The dictionary to free.
  */
-static void dictFree(Dictionary* dict)
+static void dictFree(Dictionary* restrict dict)
 {
     for(unsigned int i = 0; i < dict->index; i++)
     {
@@ -812,7 +839,7 @@ static void dictFree(Dictionary* dict)
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFDictionaryRef deserializeDictionary(KSJSONDeserializeContext* context)
+static CFDictionaryRef deserializeDictionary(KSJSONDeserializeContext* restrict context)
 {
     CFTypeRef result = NULL;
     context->pos++;
@@ -873,7 +900,7 @@ done:
  *
  * @return The deserialized value, or nil if an error occurred.
  */
-static CFTypeRef deserializeElement(KSJSONDeserializeContext* context)
+static CFTypeRef deserializeElement(KSJSONDeserializeContext* restrict context)
 {
     skipWhitespace(context->pos, context->end);
     
@@ -910,7 +937,7 @@ static CFTypeRef deserializeElement(KSJSONDeserializeContext* context)
  *
  * @return The deserialized container, or nil if an error occurred.
  */
-static CFTypeRef deserializeJSON(KSJSONDeserializeContext* context)
+static CFTypeRef deserializeJSON(KSJSONDeserializeContext* restrict context)
 {
     skipWhitespace(context->pos, context->end);
     switch(*context->pos)
@@ -949,7 +976,7 @@ static unsigned char g_true[] = {'t','r','u','e'};
 static unsigned char g_null[] = {'n','u','l','l'};
 
 // Forward declaration
-static void serializeObject(KSJSONSerializeContext* context, CFTypeRef object);
+static void serializeObject(KSJSONSerializeContext* restrict context, CFTypeRef object);
 
 
 /** Initialize a serialization context.
@@ -958,7 +985,7 @@ static void serializeObject(KSJSONSerializeContext* context, CFTypeRef object);
  *
  * @return true if successful.
  */
-static void serializeInit(KSJSONSerializeContext* context)
+static void serializeInit(KSJSONSerializeContext* restrict context)
 {
     resizableBufferAlloc(&context->buffer, kSerialize_InitialBuffSize, context->error);
     resizableBufferAlloc(&context->scratch, kScratchBuffSize, context->error);
@@ -970,7 +997,7 @@ static void serializeInit(KSJSONSerializeContext* context)
  *
  * @return The JSON string.
  */
-static NSData* serializeFinish(KSJSONSerializeContext* context)
+static NSData* serializeFinish(KSJSONSerializeContext* restrict context)
 {
     resizableBufferDeallocate(&context->scratch);
     resizableBufferResizeOptimal(&context->buffer);
@@ -984,7 +1011,7 @@ static NSData* serializeFinish(KSJSONSerializeContext* context)
  *
  * @param context The serialization context.
  */
-static void serializeAbort(KSJSONSerializeContext* context)
+static void serializeAbort(KSJSONSerializeContext* restrict context)
 {
     resizableBufferDeallocate(&context->buffer);
     resizableBufferDeallocate(&context->scratch);
@@ -1049,7 +1076,7 @@ CONTEXT->buffer.pos -= NUM_CHARS
  *
  * @return true if successful.
  */
-static void serializeArray(KSJSONSerializeContext* context, CFTypeRef array)
+static void serializeArray(KSJSONSerializeContext* restrict context, CFTypeRef array)
 {
     CFIndex count = CFArrayGetCount(array);
     
@@ -1082,7 +1109,7 @@ static void serializeArray(KSJSONSerializeContext* context, CFTypeRef array)
  *
  * @return true if successful.
  */
-static void serializeDictionary(KSJSONSerializeContext* context,
+static void serializeDictionary(KSJSONSerializeContext* restrict context,
                                 CFTypeRef dict)
 {
     void* memory = NULL;
@@ -1151,7 +1178,7 @@ done:
  *
  * @return true if successful.
  */
-static void serializeString(KSJSONSerializeContext* context, CFTypeRef string)
+static void serializeString(KSJSONSerializeContext* restrict context, CFTypeRef string)
 {
     CFIndex length = CFStringGetLength(string);
     unlikely_if(length == 0)
@@ -1179,21 +1206,20 @@ static void serializeString(KSJSONSerializeContext* context, CFTypeRef string)
     on_error_return();
     serializeChar(context, '"');
     
-    const unsigned char* ch = context->scratch.bytes;
-    const unsigned char* end = ch + byteLength;
-    const unsigned char* nextEscape = ch;
-    for(; nextEscape < end; nextEscape++)
+    context->scratch.pos = context->scratch.bytes;
+    const unsigned char* end = context->scratch.pos + byteLength;
+    
+    for(; context->scratch.pos < end; context->scratch.pos++)
     {
-        unlikely_if(g_escapeValues[*nextEscape])
+        likely_if(!g_escapeValues[*context->scratch.pos])
         {
-            likely_if(nextEscape > ch)
-            {
-                serializeChars(context, ch, (unsigned int)(nextEscape - ch));
-            }
+            serializeChar(context, *context->scratch.pos);
+        }
+        else
+        {
             serializeReserve(context, 1);
             on_error_return();
-            ch = nextEscape + 1;
-            switch(*nextEscape)
+            switch(*context->scratch.pos)
             {
                 case '\\':
                     serialize2Chars(context, '\\', '\\');
@@ -1217,16 +1243,12 @@ static void serializeString(KSJSONSerializeContext* context, CFTypeRef string)
                     serialize2Chars(context, '\\', 't');
                     break;
                 default:
-                    makeError(context->error, @"Invalid character: 0x%02x", *nextEscape);
+                    makeError(context->error, @"Invalid character: 0x%02x", *context->scratch.pos);
                     return;
             }
         }
     }
-    likely_if(nextEscape > ch)
-    {
-        serializeChars(context, ch, (unsigned int)(nextEscape - ch));
-    }
-    
+
     serializeChar(context, '"');
 }
 
@@ -1236,8 +1258,8 @@ static void serializeString(KSJSONSerializeContext* context, CFTypeRef string)
  *
  * @param numberString The number to serialize.
  */
-static void serializeNumberString(KSJSONSerializeContext* context,
-                                  const char* numberString)
+static void serializeNumberString(KSJSONSerializeContext* restrict context,
+                                  const char* restrict numberString)
 {
     size_t length = strlen(numberString);
     serializeReserve(context, length);
@@ -1251,7 +1273,7 @@ static void serializeNumberString(KSJSONSerializeContext* context,
  *
  * @param value The value to serialize.
  */
-static void serializeInteger(KSJSONSerializeContext* context,
+static void serializeInteger(KSJSONSerializeContext* restrict context,
                              long long value)
 {
     unlikely_if(value == 0)
@@ -1291,7 +1313,7 @@ static void serializeInteger(KSJSONSerializeContext* context,
  *
  * @return true if successful.
  */
-static void serializeNumber(KSJSONSerializeContext* context,
+static void serializeNumber(KSJSONSerializeContext* restrict context,
                             CFTypeRef number)
 {
     CFNumberType numberType = CFNumberGetType(number);
@@ -1438,7 +1460,7 @@ static void serializeNumber(KSJSONSerializeContext* context,
  *
  * @return always true.
  */
-static void serializeNull(KSJSONSerializeContext* context, CFTypeRef object)
+static void serializeNull(KSJSONSerializeContext* restrict context, CFTypeRef object)
 {
 #pragma unused(object)
     serializeReserve(context, 4);
@@ -1447,7 +1469,7 @@ static void serializeNull(KSJSONSerializeContext* context, CFTypeRef object)
 }
 
 // Prototype for a serialization routine.
-typedef void (*serializeFunction)(KSJSONSerializeContext* context, CFTypeRef object);
+typedef void (*serializeFunction)(KSJSONSerializeContext* restrict context, CFTypeRef object);
 
 /** The different kinds of classes we are interested in. */
 typedef enum
@@ -1481,7 +1503,7 @@ static const serializeFunction g_serializeFunctions[] =
  *
  * @return true if successful.
  */
-static void serializeObject(KSJSONSerializeContext* context, CFTypeRef objectRef)
+static void serializeObject(KSJSONSerializeContext* restrict context, CFTypeRef objectRef)
 {
     id object = (__bridge id) objectRef;
     
@@ -1588,22 +1610,6 @@ static void serializeObject(KSJSONSerializeContext* context, CFTypeRef objectRef
 failed:
     serializeAbort(context);
     return nil;
-}
-
-static void deserializeInit(KSJSONDeserializeContext* context, NSData* jsonData)
-{
-    unlikely_if(jsonData == nil)
-    {
-        makeError(context->error, @"data is nil");
-        return;
-    }
-    
-    CFDataRef dataRef = (__bridge CFDataRef) jsonData;
-    const unsigned char* start = (const unsigned char*)CFDataGetBytePtr(dataRef);    
-    context->pos = start;
-    context->end = start + CFDataGetLength(dataRef);
-    
-    resizableBufferAlloc(&context->scratch, kScratchBuffSize, context->error);
 }
 
 /** Deserialize a JSON string.
