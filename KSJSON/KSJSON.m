@@ -48,6 +48,9 @@
 // Starting buffer size for the serialized JSON string.
 #define kSerialize_InitialBuffSize 65536
 
+#define kClassCacheSize 0x100
+#define kClassCacheMask (kClassCacheSize - 1)
+
 
 
 #pragma mark Tokens
@@ -1540,29 +1543,14 @@ static void serializeNull(KSJSONSerializeContext* restrict context,
 typedef void (*serializeFunction)(KSJSONSerializeContext* restrict context,
                                   CFTypeRef object);
 
-/** The different kinds of classes we are interested in. */
-typedef enum
+typedef struct
 {
-    KSJSON_ClassString,
-    KSJSON_ClassNumber,
-    KSJSON_ClassArray,
-    KSJSON_ClassDictionary,
-    KSJSON_ClassNull,
-    KSJSON_ClassCount,
-} KSJSON_Class;
+    Class class;
+    serializeFunction serializeFunction;
+} KSJSON_ClassCacheEntry;
 
 /** Cache for holding classes we've seen before. */
-static Class g_classCache[KSJSON_ClassCount];
-
-/** Pointers to functions that can serialize various classes of object. */
-static const serializeFunction g_serializeFunctions[] =
-{
-    serializeString,
-    serializeNumber,
-    serializeArray,
-    serializeDictionary,
-    serializeNull,
-};
+static KSJSON_ClassCacheEntry g_classCache[kClassCacheSize];
 
 /** Serialize an object.
  *
@@ -1579,36 +1567,36 @@ static void serializeObject(KSJSONSerializeContext* restrict context,
     
     // Check the cache first.
     Class cls = object_getClass(object);
-    for(KSJSON_Class i = 0; i < KSJSON_ClassCount; i++)
+    unsigned int cacheIndex = (((uintptr_t)cls)>>2) & kClassCacheMask;
+    KSJSON_ClassCacheEntry* entry = g_classCache + cacheIndex;
+    likely_if(entry->class == cls)
     {
-        unlikely_if(g_classCache[i] == cls)
-        {
-            g_serializeFunctions[i](context, objectRef);
-            return;
-        }
+        entry->serializeFunction(context, objectRef);
+        return;
     }
     
     // Failing that, look it up the long way and cache the class.
-    KSJSON_Class classType = KSJSON_ClassCount;
+    serializeFunction serializeFunction;
+    
     if([object isKindOfClass:[NSString class]])
     {
-        classType = KSJSON_ClassString;
+        serializeFunction = serializeString;
     }
     else if([object isKindOfClass:[NSNumber class]])
     {
-        classType = KSJSON_ClassNumber;
+        serializeFunction = serializeNumber;
     }
     else if([object isKindOfClass:[NSArray class]])
     {
-        classType = KSJSON_ClassArray;
+        serializeFunction = serializeArray;
     }
     else if([object isKindOfClass:[NSDictionary class]])
     {
-        classType = KSJSON_ClassDictionary;
+        serializeFunction = serializeDictionary;
     }
     else if([object isKindOfClass:[NSNull class]])
     {
-        classType = KSJSON_ClassNull;
+        serializeFunction = serializeNull;
     }
     else
     {
@@ -1616,9 +1604,10 @@ static void serializeObject(KSJSONSerializeContext* restrict context,
                   @"Cannot serialize object of type %@", [object class]);
         return;
     }
-    
-    g_classCache[classType] = cls;
-    g_serializeFunctions[classType](context, objectRef);
+
+    entry->class = cls;
+    entry->serializeFunction = serializeFunction;
+    entry->serializeFunction(context, objectRef);
 }
 
 #pragma mark -
