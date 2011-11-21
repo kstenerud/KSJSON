@@ -50,6 +50,19 @@ static NSData* makeData(NSString* string)
     return [string dataUsingEncoding:NSUTF8StringEncoding];
 }
 
+- (void)testSerializeDeserializeNilError
+{
+    NSString* expected = @"[]";
+    id original = [NSArray array];
+    NSString* jsonString = makeString([KSJSON serializeObject:original error:nil]);
+    STAssertNotNil(jsonString, @"");
+    STAssertEqualObjects(jsonString, expected, @"");
+    id result = [KSJSON deserializeData:makeData(jsonString) error:nil];
+    STAssertNotNil(result, @"");
+    STAssertEqualObjects(result, original, @"");
+}
+
+
 - (void)testSerializeDeserializeArrayEmpty
 {
     NSError* error = (NSError*)self;
@@ -596,6 +609,18 @@ static NSData* makeData(NSString* string)
     STAssertEqualObjects(value, expected, @"");
 }
 
+- (void) testDeserializeUnicode4
+{
+    NSError* error = (NSError*)self;
+    NSString* json = @"[\"\\u0020One\"]";
+    NSString* expected = @" One";
+    NSArray* result = [KSJSON deserializeData:makeData(json) error:&error];
+    STAssertNotNil(result, @"");
+    STAssertNil(error, @"");
+    NSString* value = [result objectAtIndex:0];
+    STAssertEqualObjects(value, expected, @"");
+}
+
 - (void) testDeserializeControlChars
 {
     NSError* error = (NSError*)self;
@@ -920,6 +945,15 @@ static NSData* makeData(NSString* string)
     STAssertNotNil(error, @"");
 }
 
+- (void) testSerializeNil
+{
+    NSError* error = (NSError*)self;
+    id source = nil;
+    NSString* result = makeString([KSJSON serializeObject:source error:&error]);
+    STAssertNil(result, @"");
+    STAssertNotNil(error, @"");
+}
+
 - (void) testSerializeBadTopLevelType
 {
     NSError* error = (NSError*)self;
@@ -969,6 +1003,24 @@ static NSData* makeData(NSString* string)
 {
     NSError* error = (NSError*)self;
     NSString* jsonString = @"[\"One\\ubarfTwo\"]";
+    id result = [KSJSON deserializeData:makeData(jsonString) error:&error];
+    STAssertNil(result, @"");
+    STAssertNotNil(error, @"");
+}
+
+- (void)testDeserializeArrayInvalidUnicodeSequence2
+{
+    NSError* error = (NSError*)self;
+    NSString* jsonString = @"[\"One\\uXTwo\"]";
+    id result = [KSJSON deserializeData:makeData(jsonString) error:&error];
+    STAssertNil(result, @"");
+    STAssertNotNil(error, @"");
+}
+
+- (void)testDeserializeArrayInvalidUnicodeSequence3
+{
+    NSError* error = (NSError*)self;
+    NSString* jsonString = @"[\"One\\u0XTwo\"]";
     id result = [KSJSON deserializeData:makeData(jsonString) error:&error];
     STAssertNil(result, @"");
     STAssertNotNil(error, @"");
@@ -1131,6 +1183,15 @@ static NSData* makeData(NSString* string)
 {
     NSError* error = (NSError*)self;
     NSString* jsonString = @"X{\"blah\":\"blah\"}";
+    id result = [KSJSON deserializeData:makeData(jsonString) error:&error];
+    STAssertNil(result, @"");
+    STAssertNotNil(error, @"");
+}
+
+- (void)testDeserializeNil
+{
+    NSError* error = (NSError*)self;
+    NSString* jsonString = nil;
     id result = [KSJSON deserializeData:makeData(jsonString) error:&error];
     STAssertNil(result, @"");
     STAssertNotNil(error, @"");
