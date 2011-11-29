@@ -113,6 +113,14 @@ unlikely_if(*context->error != nil) \
     goto X; \
 }
 
+/** Generate an index into the class cache.
+ *
+ * @param CLASS The class to generate an index for.
+ *
+ * @return An index into the cache.
+ */
+#define cacheIndexOfClass(CLASS) ((((uintptr_t)CLASS)>>2) & kClassCacheMask);
+
 
 
 #pragma mark Error Handling
@@ -1552,30 +1560,18 @@ typedef struct
 /** Cache for holding classes we've seen before. */
 static KSJSON_ClassCacheEntry g_classCache[kClassCacheSize];
 
-/** Serialize an object.
+
+/** Add an object's class to the class cache.
  *
- * @param context The serialization context.
+ * @param object The object whose class to add.
  *
- * @param objectRef The object to serialize.
- *
- * @return true if successful.
+ * @param error Holds any errors that occur.
  */
-static void serializeObject(KSJSONSerializeContext* restrict context,
-                            CFTypeRef objectRef)
+static void cacheClassOfObject(id object, NSError** error)
 {
-    id object = (__bridge id) objectRef;
-    
-    // Check the cache first.
     Class cls = object_getClass(object);
-    unsigned int cacheIndex = (((uintptr_t)cls)>>2) & kClassCacheMask;
+    unsigned int cacheIndex = cacheIndexOfClass(cls);
     KSJSON_ClassCacheEntry* entry = g_classCache + cacheIndex;
-    likely_if(entry->class == cls)
-    {
-        entry->serializeFunction(context, objectRef);
-        return;
-    }
-    
-    // Failing that, look it up the long way and cache the class.
     serializeFunction serializeFunction;
     
     if([object isKindOfClass:[NSString class]])
@@ -1600,13 +1596,42 @@ static void serializeObject(KSJSONSerializeContext* restrict context,
     }
     else
     {
-        makeError(context->error,
-                  @"Cannot serialize object of type %@", [object class]);
+        makeError(error, @"Could not determine type of %@", [object class]);
         return;
     }
-
+    
     entry->class = cls;
     entry->serializeFunction = serializeFunction;
+}
+
+/** Serialize an object.
+ *
+ * @param context The serialization context.
+ *
+ * @param objectRef The object to serialize.
+ *
+ * @return true if successful.
+ */
+static void serializeObject(KSJSONSerializeContext* restrict context,
+                            CFTypeRef objectRef)
+{
+    id object = (__bridge id) objectRef;
+    
+    // Check the cache first.
+    Class cls = object_getClass(object);
+    unsigned int cacheIndex = cacheIndexOfClass(cls);
+    KSJSON_ClassCacheEntry* entry = g_classCache + cacheIndex;
+    likely_if(entry->class == cls)
+    {
+        // It's in the cache already. Serialize.
+        entry->serializeFunction(context, objectRef);
+        return;
+    }
+    
+    // Cache new class, then serialize.
+    cacheClassOfObject(object, context->error);
+    on_error_return();
+
     entry->serializeFunction(context, objectRef);
 }
 
@@ -1624,6 +1649,23 @@ static void serializeObject(KSJSONSerializeContext* restrict context,
     }
     g_escapeValues['\\'] = true;
     g_escapeValues['"'] = true;
+    
+    // Precache all common classes.
+    NSError* error;
+    cacheClassOfObject([NSNull null], &error);
+    cacheClassOfObject([NSMutableArray array], &error);
+    cacheClassOfObject([NSMutableDictionary dictionary], &error);
+    cacheClassOfObject([NSArray array], &error);
+    CFArrayRef arrayRef = CFArrayCreate(NULL, NULL, 0, NULL);
+    cacheClassOfObject((__bridge id)arrayRef, &error);
+    CFRelease(arrayRef);
+    cacheClassOfObject([NSDictionary dictionary], &error);
+    cacheClassOfObject([NSMutableString string], &error);
+    cacheClassOfObject([NSNumber numberWithInt:1], &error);
+    cacheClassOfObject([NSNumber numberWithBool:YES], &error);
+    cacheClassOfObject(@"", &error);
+    cacheClassOfObject([NSString stringWithFormat:@"%d", 1], &error);
+    
 }
 
 /** Serialize an object.
